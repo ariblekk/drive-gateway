@@ -1,0 +1,21 @@
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: drive-gateway
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      STORAGE_DIR: /data
+      DATABASE_PATH: /data/gateway.db
+    volumes:
+      - gateway_data:/data
+
+volumes:
+  gateway_data:
+    name: drive_gateway_data

@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.gitignore
+data
+coverage
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+README.md
+PLAN.md
+.commandcode

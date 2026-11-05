@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1793822191267,
+      "tag": "0000_safe_mole_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793827532866,
+      "tag": "0001_daily_omega_sentinel",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793829792170,
+      "tag": "0002_uneven_skrulls",
+      "breakpoints": true
+    }
+  ]
+}

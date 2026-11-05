@@ -1,0 +1,1475 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import {
+  IconArrowsMove,
+  IconChevronLeft,
+  IconChevronRight,
+  IconDotsVertical,
+  IconDownload,
+  IconFolder,
+  IconFolderPlus,
+  IconPencil,
+  IconRestore,
+  IconSearch,
+  IconTrash,
+  IconUpload,
+} from "@tabler/icons-react";
+import { toast } from "sonner";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+import { BulkBar } from "./bulk-bar";
+import {
+  apiGet,
+  apiSend,
+  FILES_CHANGED_EVENT,
+  notifyStorageChanged,
+  toMessage,
+} from "./client";
+import { formatBytes, formatDate } from "./format";
+import { useHeader } from "./header-provider";
+import { useUploadDialog } from "./upload-provider";
+import type {
+  Breadcrumb as BreadcrumbData,
+  FileItem,
+  FolderItem,
+} from "./types";
+
+type FolderFormState =
+  | { type: "create" }
+  | { type: "rename"; folder: FolderItem }
+  | { type: "move"; folder: FolderItem };
+
+interface FolderActionState {
+  type: "trash" | "restore" | "purge";
+  folder: FolderItem;
+}
+
+const PAGE_SIZE = 20;
+
+type FileBulkAction = "trash" | "restore" | "purge";
+
+export function FilesView({
+  mode = "active",
+}: {
+  mode?: "active" | "trashed";
+} = {}) {
+  const isTrash = mode === "trashed";
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(
+    null,
+  );
+  const [folders, setFolders] = useState<FolderItem[] | null>(null);
+  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbData[]>([]);
+  const [files, setFiles] = useState<FileItem[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [q, setQ] = useState("");
+  const [appliedQ, setAppliedQ] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [selectedFolderIds, setSelectedFolderIds] = useState<
+    Set<string>
+  >(new Set());
+  const [fileToDelete, setFileToDelete] = useState<FileItem | null>(
+    null,
+  );
+  const [deletePermanently, setDeletePermanently] = useState(false);
+  const [folderForm, setFolderForm] = useState<FolderFormState | null>(
+    null,
+  );
+  const [folderName, setFolderName] = useState("");
+  const [folderParent, setFolderParent] = useState("root");
+  const [folderAction, setFolderAction] =
+    useState<FolderActionState | null>(null);
+  const [moveFilesOpen, setMoveFilesOpen] = useState(false);
+  const [moveFolderId, setMoveFolderId] = useState("root");
+  const [allFolders, setAllFolders] = useState<FolderItem[]>([]);
+  const { openUploadDialog } = useUploadDialog();
+  const { setActions, setCount, setCustomTitle } = useHeader();
+
+  const fetchFolders = useCallback(async () => {
+    if (isTrash) {
+      return apiGet<{
+        folders: FolderItem[];
+        breadcrumbs: BreadcrumbData[];
+      }>("/api/admin/folders?all=1&status=trashed");
+    }
+
+    return apiGet<{
+      folders: FolderItem[];
+      breadcrumbs: BreadcrumbData[];
+    }>(
+      `/api/admin/folders?parentId=${encodeURIComponent(
+        currentFolderId ?? "root",
+      )}&status=active`,
+    );
+  }, [currentFolderId, isTrash]);
+
+  const fetchFiles = useCallback(
+    (query: string) => {
+      const params = new URLSearchParams();
+      params.set("status", mode);
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(offset));
+
+      if (!isTrash) {
+        params.set("folderId", currentFolderId ?? "root");
+      }
+
+      if (query) {
+        params.set("q", query);
+      }
+
+      return apiGet<{ files: FileItem[]; total: number }>(
+        `/api/admin/files?${params.toString()}`,
+      );
+    },
+    [currentFolderId, isTrash, mode, offset],
+  );
+
+  const load = useCallback(async () => {
+    const [folderData, fileData] = await Promise.all([
+      fetchFolders(),
+      fetchFiles(appliedQ),
+    ]);
+
+    setFolders(folderData.folders);
+    setBreadcrumbs(folderData.breadcrumbs);
+    setFiles(fileData.files);
+    setTotal(fileData.total);
+  }, [fetchFolders, fetchFiles, appliedQ]);
+
+  useEffect(() => {
+    let active = true;
+
+    Promise.all([fetchFolders(), fetchFiles(appliedQ)])
+      .then(([folderData, fileData]) => {
+        if (active) {
+          setFolders(folderData.folders);
+          setBreadcrumbs(folderData.breadcrumbs);
+          setFiles(fileData.files);
+          setTotal(fileData.total);
+        }
+      })
+      .catch((cause) => {
+        if (active) {
+          setError(toMessage(cause));
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [fetchFolders, fetchFiles, appliedQ]);
+
+  useEffect(() => {
+    const reload = () => {
+      load().catch((cause) => setError(toMessage(cause)));
+    };
+
+    window.addEventListener(FILES_CHANGED_EVENT, reload);
+
+    return () => {
+      window.removeEventListener(FILES_CHANGED_EVENT, reload);
+    };
+  }, [load]);
+
+  const fetchAllFolders = useCallback(async () => {
+    const data = await apiGet<{ folders: FolderItem[] }>(
+      "/api/admin/folders?all=1&status=active",
+    );
+    setAllFolders(data.folders);
+    return data.folders;
+  }, []);
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectedFolderIds(new Set());
+  };
+
+  const navigateTo = (folderId: string | null) => {
+    setCurrentFolderId(folderId);
+    clearSelection();
+    setQ("");
+    setAppliedQ("");
+    setOffset(0);
+  };
+
+  const applySearch = () => {
+    setAppliedQ(q.trim());
+    clearSelection();
+    setOffset(0);
+  };
+
+  const goToOffset = (next: number) => {
+    setOffset(Math.max(0, next));
+    clearSelection();
+  };
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+
+      return next;
+    });
+  };
+
+  const toggleFolderSelected = (id: string, checked: boolean) => {
+    setSelectedFolderIds((current) => {
+      const next = new Set(current);
+
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+
+      return next;
+    });
+  };
+
+  const visibleFolders = folders
+    ? appliedQ
+      ? folders.filter((folder) =>
+          folder.name.toLowerCase().includes(appliedQ.toLowerCase()),
+        )
+      : folders
+    : [];
+
+  const selectedCount = selectedIds.size + selectedFolderIds.size;
+
+  const allFilesSelected =
+    files === null ||
+    files.length === 0 ||
+    files.every((file) => selectedIds.has(file.id));
+  const allFoldersSelected =
+    visibleFolders.length === 0 ||
+    visibleFolders.every((folder) =>
+      selectedFolderIds.has(folder.id),
+    );
+  const allSelected =
+    ((files?.length ?? 0) > 0 || visibleFolders.length > 0) &&
+    allFilesSelected &&
+    allFoldersSelected;
+  const someSelected =
+    (files?.some((file) => selectedIds.has(file.id)) ?? false) ||
+    visibleFolders.some((folder) =>
+      selectedFolderIds.has(folder.id),
+    );
+
+  const toggleAll = (checked: boolean) => {
+    setSelectedIds(
+      checked
+        ? new Set((files ?? []).map((file) => file.id))
+        : new Set(),
+    );
+    setSelectedFolderIds(
+      checked
+        ? new Set(visibleFolders.map((folder) => folder.id))
+        : new Set(),
+    );
+  };
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.min(
+    Math.max(1, Math.floor(offset / PAGE_SIZE) + 1),
+    totalPages,
+  );
+
+  const deleteSelected = async () => {
+    if (!fileToDelete) {
+      return;
+    }
+
+    const name = fileToDelete.name;
+    const endpoint = deletePermanently
+      ? `/api/admin/files/${fileToDelete.id}/permanent`
+      : `/api/admin/files/${fileToDelete.id}`;
+
+    setBusyId(fileToDelete.id);
+    setError(null);
+
+    try {
+      await apiSend(endpoint, "DELETE");
+      await load();
+      notifyStorageChanged();
+      toast.success(
+        deletePermanently
+          ? `Permanently deleted ${name}`
+          : `Moved ${name} to trash`,
+      );
+      setFileToDelete(null);
+    } catch (cause) {
+      toast.error(toMessage(cause));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const restoreFile = async (file: FileItem) => {
+    setBusyId(file.id);
+    setError(null);
+
+    try {
+      await apiSend(`/api/admin/files/${file.id}/restore`, "POST");
+      await load();
+      notifyStorageChanged();
+      toast.success(`Restored ${file.name}`);
+    } catch (cause) {
+      toast.error(toMessage(cause));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const runBulk = async (action: FileBulkAction) => {
+    const fileIds = Array.from(selectedIds);
+    const folderIds = Array.from(selectedFolderIds);
+    const count = fileIds.length + folderIds.length;
+
+    if (count === 0) {
+      return;
+    }
+
+    const loadingLabel =
+      action === "trash"
+        ? "Moving"
+        : action === "restore"
+          ? "Restoring"
+          : "Deleting";
+    const toastId = toast.loading(
+      `${loadingLabel} ${count} item(s)…`,
+    );
+
+    setBusyId("bulk");
+
+    try {
+      const fileRequests = fileIds.map((id) => {
+        if (action === "trash") {
+          return apiSend(`/api/admin/files/${id}`, "DELETE");
+        }
+
+        if (action === "restore") {
+          return apiSend(`/api/admin/files/${id}/restore`, "POST");
+        }
+
+        return apiSend(`/api/admin/files/${id}/permanent`, "DELETE");
+      });
+
+      const folderRequests = folderIds.map((id) => {
+        if (action === "trash") {
+          return apiSend(`/api/admin/folders/${id}`, "DELETE");
+        }
+
+        if (action === "restore") {
+          return apiSend(`/api/admin/folders/${id}/restore`, "POST");
+        }
+
+        return apiSend(
+          `/api/admin/folders/${id}/permanent`,
+          "DELETE",
+        );
+      });
+
+      const results = await Promise.allSettled([
+        ...fileRequests,
+        ...folderRequests,
+      ]);
+      const failed = results.filter(
+        (result) => result.status === "rejected",
+      ).length;
+      const succeeded = count - failed;
+
+      clearSelection();
+      await load();
+      notifyStorageChanged();
+
+      if (failed === 0) {
+        toast.success(
+          action === "trash"
+            ? `${succeeded} item(s) moved to trash`
+            : action === "restore"
+              ? `${succeeded} item(s) restored`
+              : `${succeeded} item(s) deleted permanently`,
+          { id: toastId },
+        );
+      } else {
+        toast.warning(
+          `${succeeded} succeeded, ${failed} failed`,
+          { id: toastId },
+        );
+      }
+    } catch (cause) {
+      toast.error(toMessage(cause), { id: toastId });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const openMoveFiles = async () => {
+    if (selectedCount === 0) {
+      return;
+    }
+
+    setMoveFolderId("root");
+    setMoveFilesOpen(true);
+
+    try {
+      await fetchAllFolders();
+    } catch (cause) {
+      toast.error(toMessage(cause));
+    }
+  };
+
+  const openMoveSingle = async (file: FileItem) => {
+    setSelectedIds(new Set([file.id]));
+    setSelectedFolderIds(new Set());
+    setMoveFolderId("root");
+    setMoveFilesOpen(true);
+
+    try {
+      await fetchAllFolders();
+    } catch (cause) {
+      toast.error(toMessage(cause));
+    }
+  };
+
+  const submitMoveFiles = async () => {
+    const fileIds = Array.from(selectedIds);
+    const folderIds = Array.from(selectedFolderIds);
+
+    if (fileIds.length === 0 && folderIds.length === 0) {
+      return;
+    }
+
+    setBusyId("bulk");
+
+    try {
+      const destination =
+        moveFolderId === "root" ? null : moveFolderId;
+      let moved = 0;
+      let failed = 0;
+
+      if (fileIds.length > 0) {
+        try {
+          const data = await apiSend<{ moved: number }>(
+            "/api/admin/files/move",
+            "POST",
+            { ids: fileIds, folderId: destination },
+          );
+          moved += data.moved;
+        } catch {
+          failed += fileIds.length;
+        }
+      }
+
+      if (folderIds.length > 0) {
+        const results = await Promise.allSettled(
+          folderIds.map((id) =>
+            apiSend(`/api/admin/folders/${id}`, "PATCH", {
+              parentId: destination,
+            }),
+          ),
+        );
+
+        for (const result of results) {
+          if (result.status === "fulfilled") {
+            moved += 1;
+          } else {
+            failed += 1;
+          }
+        }
+      }
+
+      clearSelection();
+      setMoveFilesOpen(false);
+      await load();
+      notifyStorageChanged();
+
+      if (failed === 0) {
+        toast.success(`Moved ${moved} item(s)`);
+      } else {
+        toast.warning(`${moved} moved, ${failed} failed`);
+      }
+    } catch (cause) {
+      toast.error(toMessage(cause));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const openFolderForm = useCallback(
+    async (form: FolderFormState) => {
+      setFolderForm(form);
+      setFolderName(
+        form.type === "rename" && form.folder ? form.folder.name : "",
+      );
+      setFolderParent(
+        form.type === "move" && form.folder
+          ? (form.folder.parentId ?? "root")
+          : "root",
+      );
+
+      if (form.type === "move") {
+        try {
+          await fetchAllFolders();
+        } catch (cause) {
+          toast.error(toMessage(cause));
+        }
+      }
+    },
+    [fetchAllFolders],
+  );
+
+  useEffect(() => {
+    if (isTrash) {
+      setActions(null);
+      return;
+    }
+
+    setActions(
+      <ButtonGroup>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="New folder"
+          onClick={() => void openFolderForm({ type: "create" })}
+        >
+          <IconFolderPlus />
+          <span className="hidden sm:inline">New folder</span>
+        </Button>
+        <Button
+          size="sm"
+          aria-label="Upload"
+          onClick={() => openUploadDialog(currentFolderId)}
+        >
+          <IconUpload />
+          <span className="hidden sm:inline">Upload</span>
+        </Button>
+      </ButtonGroup>,
+    );
+
+    return () => {
+      setActions(null);
+    };
+  }, [isTrash, currentFolderId, openUploadDialog, openFolderForm, setActions]);
+
+  const currentFolder = breadcrumbs[breadcrumbs.length - 1];
+
+  useEffect(() => {
+    if (files !== null) {
+      setCount(total);
+    }
+    return () => {
+      setCount(null);
+    };
+  }, [files, total, setCount]);
+
+  useEffect(() => {
+    if (!isTrash && currentFolder) {
+      setCustomTitle(currentFolder.name);
+    } else {
+      setCustomTitle(null);
+    }
+    return () => {
+      setCustomTitle(null);
+    };
+  }, [isTrash, currentFolder, setCustomTitle]);
+
+  const submitFolderForm = async (
+    event: React.FormEvent,
+  ) => {
+    event.preventDefault();
+
+    if (!folderForm) {
+      return;
+    }
+
+    try {
+      if (folderForm.type === "create") {
+        if (!folderName.trim()) {
+          toast.error("Folder name is required.");
+          return;
+        }
+
+        await apiSend("/api/admin/folders", "POST", {
+          name: folderName.trim(),
+          parentId: currentFolderId,
+        });
+        toast.success("Folder created");
+      } else if (folderForm.type === "rename") {
+        if (!folderName.trim()) {
+          toast.error("Folder name is required.");
+          return;
+        }
+
+        await apiSend(
+          `/api/admin/folders/${folderForm.folder.id}`,
+          "PATCH",
+          { name: folderName.trim() },
+        );
+        toast.success("Folder renamed");
+      } else {
+        await apiSend(
+          `/api/admin/folders/${folderForm.folder.id}`,
+          "PATCH",
+          {
+            parentId:
+              folderParent === "root" ? null : folderParent,
+          },
+        );
+        toast.success("Folder moved");
+      }
+
+      if (folderForm.type === "move") {
+        setSelectedFolderIds((current) => {
+          const next = new Set(current);
+          next.delete(folderForm.folder.id);
+          return next;
+        });
+      }
+
+      setFolderForm(null);
+      await load();
+    } catch (cause) {
+      toast.error(toMessage(cause));
+    }
+  };
+
+  const runFolderAction = async () => {
+    if (!folderAction) {
+      return;
+    }
+
+    const { type, folder } = folderAction;
+    setBusyId(folder.id);
+
+    try {
+      if (type === "trash") {
+        await apiSend(`/api/admin/folders/${folder.id}`, "DELETE");
+        toast.success(`Moved ${folder.name} to trash`);
+      } else if (type === "restore") {
+        await apiSend(
+          `/api/admin/folders/${folder.id}/restore`,
+          "POST",
+        );
+        toast.success(`Restored ${folder.name}`);
+      } else {
+        await apiSend(
+          `/api/admin/folders/${folder.id}/permanent`,
+          "DELETE",
+        );
+        toast.success(`Deleted ${folder.name} permanently`);
+      }
+
+      setSelectedFolderIds((current) => {
+        const next = new Set(current);
+        next.delete(folder.id);
+        return next;
+      });
+      setFolderAction(null);
+      await load();
+      notifyStorageChanged();
+    } catch (cause) {
+      toast.error(toMessage(cause));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const deleting = fileToDelete !== null && busyId === fileToDelete.id;
+  const editingFolder =
+    folderForm && "folder" in folderForm ? folderForm.folder : null;
+
+  const isLoading = folders === null || files === null;
+  const hasItems = visibleFolders.length > 0 || (files && files.length > 0);
+
+  return (
+    <div
+      className={`flex flex-col gap-4${
+        selectedCount > 0 ? " pb-24 sm:pb-16" : ""
+      }`}
+    >
+      {!isTrash && (
+        <Breadcrumb className="px-1">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              {breadcrumbs.length === 0 ? (
+                <BreadcrumbPage>Root</BreadcrumbPage>
+              ) : (
+                <BreadcrumbLink asChild>
+                  <button
+                    type="button"
+                    onClick={() => navigateTo(null)}
+                    className="cursor-pointer"
+                  >
+                    Root
+                  </button>
+                </BreadcrumbLink>
+              )}
+            </BreadcrumbItem>
+            {breadcrumbs.map((crumb, index) => {
+              const isLast = index === breadcrumbs.length - 1;
+              return (
+                <span
+                  key={crumb.id}
+                  className="inline-flex items-center gap-1.5"
+                >
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    {isLast ? (
+                      <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
+                    ) : (
+                      <BreadcrumbLink asChild>
+                        <button
+                          type="button"
+                          onClick={() => navigateTo(crumb.id)}
+                          className="cursor-pointer"
+                        >
+                          {crumb.name}
+                        </button>
+                      </BreadcrumbLink>
+                    )}
+                  </BreadcrumbItem>
+                </span>
+              );
+            })}
+          </BreadcrumbList>
+        </Breadcrumb>
+      )}
+
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          {error && (
+            <div className="border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {error}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <Input
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  applySearch();
+                }
+              }}
+              placeholder="Search by name"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={applySearch}
+            >
+              <IconSearch />
+              Search
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : !hasItems ? (
+            <p className="text-xs text-muted-foreground">
+              {appliedQ ? "No results found." : "No files or folders found."}
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={
+                        allSelected
+                          ? true
+                          : someSelected
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={(value) =>
+                        toggleAll(Boolean(value))
+                      }
+                      aria-label="Select all files"
+                    />
+                  </TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Folder</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visibleFolders.map((folder) => (
+                  <TableRow key={`folder-${folder.id}`}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedFolderIds.has(folder.id)}
+                        onCheckedChange={(value) =>
+                          toggleFolderSelected(
+                            folder.id,
+                            Boolean(value),
+                          )
+                        }
+                        aria-label={`Select ${folder.name}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        type="button"
+                        className="flex min-w-0 items-center gap-2 text-left hover:underline disabled:cursor-default disabled:no-underline"
+                        onClick={() => {
+                          if (!isTrash) {
+                            navigateTo(folder.id);
+                          }
+                        }}
+                        disabled={isTrash}
+                      >
+                        <IconFolder className="size-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate font-medium">
+                          {folder.name}
+                        </span>
+                      </button>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      —
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      —
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {folder.path}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          folder.status === "active"
+                            ? "secondary"
+                            : "destructive"
+                        }
+                      >
+                        {folder.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDate(folder.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Actions for ${folder.name}`}
+                              disabled={busyId === folder.id}
+                            >
+                              <IconDotsVertical />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="min-w-48"
+                          >
+                            {!isTrash && (
+                              <>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    void openFolderForm({
+                                      type: "rename",
+                                      folder,
+                                    })
+                                  }
+                                  disabled={busyId === folder.id}
+                                >
+                                  <IconPencil />
+                                  Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    void openFolderForm({
+                                      type: "move",
+                                      folder,
+                                    })
+                                  }
+                                  disabled={busyId === folder.id}
+                                >
+                                  <IconArrowsMove />
+                                  Move
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onSelect={() =>
+                                    setFolderAction({
+                                      type: "trash",
+                                      folder,
+                                    })
+                                  }
+                                  disabled={busyId === folder.id}
+                                >
+                                  <IconTrash />
+                                  Move to trash
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {isTrash && (
+                              <>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    setFolderAction({
+                                      type: "restore",
+                                      folder,
+                                    })
+                                  }
+                                  disabled={busyId === folder.id}
+                                >
+                                  <IconRestore />
+                                  Restore
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onSelect={() =>
+                                    setFolderAction({
+                                      type: "purge",
+                                      folder,
+                                    })
+                                  }
+                                  disabled={busyId === folder.id}
+                                >
+                                  <IconTrash />
+                                  Delete permanently
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {files?.map((file) => (
+                  <TableRow key={file.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(file.id)}
+                        onCheckedChange={(value) =>
+                          toggleSelected(file.id, Boolean(value))
+                        }
+                        aria-label={`Select ${file.name}`}
+                      />
+                    </TableCell>
+                    <TableCell className="max-w-64 truncate font-medium">
+                      {file.name}
+                    </TableCell>
+                    <TableCell>{formatBytes(file.size)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {file.accountEmail ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {file.path}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          file.status === "active"
+                            ? "secondary"
+                            : "outline"
+                        }
+                      >
+                        {file.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDate(file.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Actions for ${file.name}`}
+                              disabled={busyId === file.id}
+                            >
+                              <IconDotsVertical />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="min-w-48"
+                          >
+                            {!isTrash && (
+                              <>
+                                <DropdownMenuItem asChild>
+                                  <a
+                                    href={`/api/admin/files/${file.id}/download`}
+                                    onClick={() =>
+                                      toast.info(
+                                        `Downloading ${file.name}`,
+                                      )
+                                    }
+                                  >
+                                    <IconDownload />
+                                    Download
+                                  </a>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    void openMoveSingle(file)
+                                  }
+                                  disabled={busyId === file.id}
+                                >
+                                  <IconArrowsMove />
+                                  Move to folder
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onSelect={() => {
+                                    setDeletePermanently(false);
+                                    setFileToDelete(file);
+                                  }}
+                                  disabled={busyId === file.id}
+                                >
+                                  <IconTrash />
+                                  Move to trash
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {isTrash && (
+                              <>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    void restoreFile(file)
+                                  }
+                                  disabled={busyId === file.id}
+                                >
+                                  <IconRestore />
+                                  Restore
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onSelect={() => {
+                                    setDeletePermanently(true);
+                                    setFileToDelete(file);
+                                  }}
+                                  disabled={busyId === file.id}
+                                >
+                                  <IconTrash />
+                                  Delete permanently
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
+          {files !== null && total > 0 && (
+            <div className="flex flex-col gap-2 border-t border-border pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                {`${Math.min(offset + 1, total)}–${Math.min(
+                  offset + PAGE_SIZE,
+                  total,
+                )} of ${total}`}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToOffset(offset - PAGE_SIZE)}
+                  disabled={offset === 0}
+                >
+                  <IconChevronLeft />
+                  Previous
+                </Button>
+                <span>
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToOffset(offset + PAGE_SIZE)}
+                  disabled={offset + PAGE_SIZE >= total}
+                >
+                  Next
+                  <IconChevronRight />
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={folderForm !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setFolderForm(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {folderForm?.type === "create"
+                ? "New folder"
+                : folderForm?.type === "rename"
+                  ? "Rename folder"
+                  : "Move folder"}
+            </DialogTitle>
+            <DialogDescription>
+              {folderForm?.type === "create"
+                ? "Create a folder inside the current folder."
+                : folderForm?.type === "rename"
+                  ? "Enter a new folder name."
+                  : "Choose a destination folder."}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={submitFolderForm}
+          >
+            {folderForm?.type === "move" ? (
+              <Select
+                value={folderParent}
+                onValueChange={setFolderParent}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Destination" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="root">/ (Root)</SelectItem>
+                  {allFolders
+                    .filter(
+                      (folder) =>
+                        folder.id !== editingFolder?.id,
+                    )
+                    .map((folder) => (
+                      <SelectItem
+                        key={folder.id}
+                        value={folder.id}
+                      >
+                        {folder.path}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={folderName}
+                onChange={(event) =>
+                  setFolderName(event.target.value)
+                }
+                placeholder="Folder name"
+                autoFocus
+              />
+            )}
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit">
+                {folderForm?.type === "create"
+                  ? "Create"
+                  : folderForm?.type === "rename"
+                    ? "Rename"
+                    : "Move"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={moveFilesOpen} onOpenChange={setMoveFilesOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Move {selectedCount} item(s)
+            </DialogTitle>
+            <DialogDescription>
+              Choose a destination folder.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <Select
+              value={moveFolderId}
+              onValueChange={setMoveFolderId}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Destination" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="root">/ (Root)</SelectItem>
+                {allFolders
+                  .filter(
+                    (folder) => !selectedFolderIds.has(folder.id),
+                  )
+                  .map((folder) => (
+                    <SelectItem key={folder.id} value={folder.id}>
+                      {folder.path}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setMoveFilesOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void submitMoveFiles()}
+                disabled={busyId === "bulk"}
+              >
+                Move
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={folderAction !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setFolderAction(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {folderAction?.type === "trash"
+                ? "Move folder to trash?"
+                : folderAction?.type === "restore"
+                  ? "Restore folder?"
+                  : "Delete folder permanently?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {folderAction?.type === "trash"
+                ? `"${folderAction.folder.name}" and its contents will be moved to Google Drive trash.`
+                : folderAction?.type === "restore"
+                  ? `"${folderAction.folder.name}" and its contents will be restored.`
+                  : `"${folderAction?.folder.name}" and its contents will be permanently deleted from Google Drive. This cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={busyId === folderAction?.folder.id}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant={
+                folderAction?.type === "restore"
+                  ? "default"
+                  : "destructive"
+              }
+              disabled={busyId === folderAction?.folder.id}
+              onClick={(event) => {
+                event.preventDefault();
+                void runFolderAction();
+              }}
+            >
+              {busyId === folderAction?.folder.id
+                ? "Working…"
+                : folderAction?.type === "trash"
+                  ? "Move to trash"
+                  : folderAction?.type === "restore"
+                    ? "Restore"
+                    : "Delete permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={fileToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setFileToDelete(null);
+            setDeletePermanently(false);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deletePermanently
+                ? "Delete permanently?"
+                : "Move to trash?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deletePermanently
+                ? `"${fileToDelete?.name}" will be permanently deleted from Google Drive. This action cannot be undone.`
+                : `"${fileToDelete?.name}" will be moved to Google Drive trash. You can restore it later from Recycle Bin.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void deleteSelected();
+              }}
+            >
+              {deleting
+                ? deletePermanently
+                  ? "Deleting…"
+                  : "Moving…"
+                : deletePermanently
+                  ? "Delete permanently"
+                  : "Move to trash"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <BulkBar
+        selectedCount={selectedCount}
+        busy={busyId === "bulk"}
+        onClear={clearSelection}
+      >
+        {!isTrash && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void openMoveFiles()}
+              disabled={busyId === "bulk"}
+            >
+              <IconArrowsMove />
+              Move to…
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() =>
+                void runBulk("trash")
+              }
+              disabled={busyId === "bulk"}
+            >
+              <IconTrash />
+              Move to trash
+            </Button>
+          </>
+        )}
+        {isTrash && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void runBulk("restore")
+              }
+              disabled={busyId === "bulk"}
+            >
+              <IconRestore />
+              Restore
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() =>
+                void runBulk("purge")
+              }
+              disabled={busyId === "bulk"}
+            >
+              <IconTrash />
+              Delete permanently
+            </Button>
+          </>
+        )}
+      </BulkBar>
+    </div>
+  );
+}

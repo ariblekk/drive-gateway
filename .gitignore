@@ -32,6 +32,20 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# local data (SQLite DB, uploads, temp)
+/data/*
+!/data/.gitkeep
+
+# database files anywhere
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+
+# local agent metadata
+.commandcode/
 
 # vercel
 .vercel
