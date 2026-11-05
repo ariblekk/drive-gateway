@@ -9,7 +9,12 @@ export async function GET(request: Request) {
   try {
     await connection();
     const { searchParams } = new URL(request.url);
+    const bucketParam = searchParams.get("bucketId");
+    const bucketId =
+      bucketParam === "all" ? null : (bucketParam ?? "default");
+
     const result = listFiles({
+      bucketId,
       q: searchParams.get("q") ?? undefined,
       status: searchParams.get("status") ?? "all",
       folderId: searchParams.get("folderId") ?? undefined,

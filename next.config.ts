@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  skipTrailingSlashRedirect: true,
   allowedDevOrigins: ["10.10.10.98", "dev.blek.my.id"],
   cacheComponents: true,
   partialPrefetching: true,

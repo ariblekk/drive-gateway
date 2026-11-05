@@ -3,7 +3,7 @@ import { createWriteStream } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { pipeline } from "node:stream/promises";
 
@@ -29,6 +29,7 @@ import {
 } from "@/lib/google/client";
 import {
   downloadFileStream,
+  getFileChecksum,
   removeFile,
   restoreFile,
   trashFile,
@@ -41,6 +42,12 @@ import {
   syncAccountTypeUsage,
   TYPE_USAGE_STALE_MS,
 } from "@/lib/google/usage";
+import { keyFromPath } from "@/lib/s3/keys";
+import {
+  deleteFromS3Backend,
+  downloadFromS3Backend,
+  uploadToS3Backend,
+} from "@/lib/storage/s3-backend";
 
 const QUOTA_STALE_MS = 5 * 60 * 1000;
 const MAX_UPLOAD_ATTEMPTS = 3;
@@ -57,7 +64,21 @@ export interface SaveUploadInput {
   folderId?: string | null;
   size?: number;
   apiKeyId?: string | null;
+  bucketId?: string;
+  key?: string;
+  metadata?: Record<string, unknown>;
+  expectedMd5?: string;
+  expectedSha256?: string;
+  maxBytes?: number;
+  s3CredentialId?: string | null;
 }
+
+type TempFile = {
+  tempPath: string;
+  size: number;
+  md5: string;
+  sha256: string;
+};
 
 function isWebStream(
   data: UploadDataSource,
@@ -65,7 +86,10 @@ function isWebStream(
   return typeof (data as ReadableStream<Uint8Array>).getReader === "function";
 }
 
-async function writeTempFile(data: UploadDataSource): Promise<string> {
+async function writeTempFile(
+  data: UploadDataSource,
+  maxBytes?: number,
+): Promise<TempFile> {
   const tempPath = path.join(
     os.tmpdir(),
     `gdrive-gateway-${crypto.randomUUID()}`,
@@ -73,10 +97,47 @@ async function writeTempFile(data: UploadDataSource): Promise<string> {
   const nodeStream = isWebStream(data)
     ? Readable.fromWeb(data as unknown as NodeReadableStream)
     : Readable.from(data);
+  const md5 = crypto.createHash("md5");
+  const sha256 = crypto.createHash("sha256");
+  let total = 0;
+  const hashing = new Transform({
+    transform(chunk, _encoding, callback) {
+      const buffer = Buffer.isBuffer(chunk)
+        ? chunk
+        : Buffer.from(chunk);
+      total += buffer.length;
 
-  await pipeline(nodeStream, createWriteStream(tempPath));
+      if (maxBytes && total > maxBytes) {
+        callback(
+          new GatewayError(
+            "payload_too_large",
+            "Uploaded body exceeds the configured limit",
+            413,
+          ),
+        );
+        return;
+      }
 
-  return tempPath;
+      md5.update(buffer);
+      sha256.update(buffer);
+      callback(null, buffer);
+    },
+  });
+
+  await pipeline(
+    nodeStream,
+    hashing,
+    createWriteStream(tempPath),
+  );
+
+  const stats = await stat(tempPath);
+
+  return {
+    tempPath,
+    size: stats.size,
+    md5: md5.digest("hex"),
+    sha256: sha256.digest("hex"),
+  };
 }
 
 async function refreshStaleQuotas(accounts: GoogleAccount[]): Promise<void> {
@@ -121,20 +182,51 @@ export function sanitizeFileName(value: string): string {
 export async function saveUpload(
   input: SaveUploadInput,
 ): Promise<StoredFile> {
-  const tempPath = await writeTempFile(input.data);
+  const temp = await writeTempFile(input.data, input.maxBytes);
 
   try {
+    if (
+      input.expectedMd5 &&
+      input.expectedMd5.toLowerCase() !== temp.md5
+    ) {
+      throw new GatewayError(
+        "bad_request",
+        "Content-MD5 does not match the uploaded body",
+        400,
+      );
+    }
+
+    if (
+      input.expectedSha256 &&
+      input.expectedSha256 !== "UNSIGNED-PAYLOAD" &&
+      input.expectedSha256.toLowerCase() !== temp.sha256
+    ) {
+      throw new GatewayError(
+        "bad_request",
+        "x-amz-content-sha256 does not match the uploaded body",
+        400,
+      );
+    }
+
     return await uploadTempFile({
-      tempPath,
+      tempPath: temp.tempPath,
       name: input.name,
       mimeType: input.mimeType,
       path: input.path,
       folderId: input.folderId ?? null,
-      size: input.size,
+      size: temp.size,
       apiKeyId: input.apiKeyId ?? null,
+      s3CredentialId: input.s3CredentialId ?? null,
+      bucketId: input.bucketId,
+      key: input.key,
+      metadata: input.metadata,
+      md5: temp.md5,
+      sha256: temp.sha256,
     });
   } finally {
-    await rm(tempPath, { force: true }).catch(() => undefined);
+    await rm(temp.tempPath, { force: true }).catch(
+      () => undefined,
+    );
   }
 }
 
@@ -146,6 +238,12 @@ export async function saveUploadFromPath(input: {
   folderId?: string | null;
   size?: number;
   apiKeyId?: string | null;
+  s3CredentialId?: string | null;
+  bucketId?: string;
+  key?: string;
+  metadata?: Record<string, unknown>;
+  md5?: string;
+  sha256?: string;
 }): Promise<StoredFile> {
   return uploadTempFile(input);
 }
@@ -158,6 +256,12 @@ async function uploadTempFile(input: {
   folderId?: string | null;
   size?: number;
   apiKeyId?: string | null;
+  s3CredentialId?: string | null;
+  bucketId?: string;
+  key?: string;
+  metadata?: Record<string, unknown>;
+  md5?: string;
+  sha256?: string;
 }): Promise<StoredFile> {
   const stats = await stat(input.tempPath);
   const size = input.size ?? stats.size;
@@ -178,6 +282,10 @@ async function uploadTempFile(input: {
 
     virtualPath = getFolderPath(folderId);
   }
+
+  const bucketId = input.bucketId ?? "default";
+  const objectKey =
+    input.key ?? keyFromPath(virtualPath, input.name);
 
   let accounts = db.select().from(googleAccounts).all();
   await refreshStaleQuotas(accounts);
@@ -206,27 +314,51 @@ async function uploadTempFile(input: {
     tried.add(account.id);
 
     try {
-      const auth = await getAuthorizedClient(account);
-      const uploaded = await uploadFromPath({
-        auth,
-        filePath: input.tempPath,
-        name: input.name,
-        mimeType: input.mimeType,
-      });
-
-      if (!uploaded.id) {
-        throw new Error("Google Drive did not return a file id");
-      }
-
       const now = Date.now();
       const id = crypto.randomUUID();
+      let remoteId: string;
+      let md5Checksum: string | null = null;
+
+      if (account.provider === "s3") {
+        const uploaded = await uploadToS3Backend(account, {
+          filePath: input.tempPath,
+          name: input.name,
+          mimeType: input.mimeType,
+          fileId: id,
+          md5: input.md5,
+        });
+        remoteId = uploaded.remoteId;
+        md5Checksum = uploaded.md5Checksum ?? null;
+      } else {
+        const auth = await getAuthorizedClient(account);
+        const uploaded = await uploadFromPath({
+          auth,
+          filePath: input.tempPath,
+          name: input.name,
+          mimeType: input.mimeType,
+        });
+
+        if (!uploaded.id) {
+          throw new Error("Google Drive did not return a file id");
+        }
+
+        remoteId = uploaded.id;
+        md5Checksum = uploaded.md5Checksum ?? null;
+      }
 
       db.insert(files)
         .values({
           id,
           accountId: account.id,
           folderId,
-          driveFileId: uploaded.id,
+          driveFileId: remoteId,
+          bucketId,
+          key: objectKey,
+          etag: input.md5 ?? md5Checksum ?? null,
+          metadata: input.metadata
+            ? JSON.stringify(input.metadata)
+            : null,
+          s3CredentialId: input.s3CredentialId ?? null,
           name: input.name,
           mimeType: input.mimeType,
           size,
@@ -309,6 +441,7 @@ async function uploadTempFile(input: {
 
 export function listFiles(
   options: {
+    bucketId?: string | null;
     q?: string;
     status?: string;
     folderId?: string | null;
@@ -325,6 +458,10 @@ export function listFiles(
 
   if (status !== "all") {
     conditions.push(eq(files.status, status));
+  }
+
+  if (options.bucketId) {
+    conditions.push(eq(files.bucketId, options.bucketId));
   }
 
   if (options.folderId === "root") {
@@ -375,6 +512,61 @@ export function getFileById(
   return file;
 }
 
+export function getFileByBucketKey(
+  bucketId: string,
+  key: string,
+): StoredFile | null {
+  return (
+    getDb()
+      .select()
+      .from(files)
+      .where(
+        and(
+          eq(files.bucketId, bucketId),
+          eq(files.key, key),
+          eq(files.status, "active"),
+        ),
+      )
+      .orderBy(desc(files.updatedAt))
+      .get() ?? null
+  );
+}
+
+export function updateFileEtag(id: string, etag: string): void {
+  getDb()
+    .update(files)
+    .set({ etag })
+    .where(eq(files.id, id))
+    .run();
+}
+
+export async function ensureFileEtag(
+  file: StoredFile,
+): Promise<string> {
+  if (file.etag) {
+    return file.etag;
+  }
+
+  try {
+    const account = getAccountById(file.accountId);
+
+    if (account.provider === "s3") {
+      return file.etag ?? file.id;
+    }
+
+    const auth = await getAuthorizedClient(account);
+    const checksum = await getFileChecksum({
+      auth,
+      driveFileId: file.driveFileId,
+    });
+    const etag = checksum.md5Checksum ?? file.id;
+    updateFileEtag(file.id, etag);
+    return etag;
+  } catch {
+    return file.id;
+  }
+}
+
 export function getAccountById(id: string): GoogleAccount {
   const account = getDb()
     .select()
@@ -392,15 +584,43 @@ export function getAccountById(id: string): GoogleAccount {
 export async function openFileDownload(
   id: string,
   range?: string | null,
-): Promise<{ file: StoredFile; account: GoogleAccount; response: Awaited<ReturnType<typeof downloadFileStream>> }> {
+): Promise<{
+  file: StoredFile;
+  account: GoogleAccount;
+  response: {
+    data: Readable;
+    status: number;
+    headers: Record<string, string>;
+  };
+}> {
   const file = getFileById(id);
   const account = getAccountById(file.accountId);
-  const auth = await getAuthorizedClient(account);
-  const response = await downloadFileStream({
-    auth,
-    driveFileId: file.driveFileId,
-    range,
-  });
+
+  let response: {
+    data: Readable;
+    status: number;
+    headers: Record<string, string>;
+  };
+
+  if (account.provider === "s3") {
+    response = await downloadFromS3Backend(
+      account,
+      file.driveFileId,
+      range,
+    );
+  } else {
+    const auth = await getAuthorizedClient(account);
+    const driveRes = await downloadFileStream({
+      auth,
+      driveFileId: file.driveFileId,
+      range,
+    });
+    response = {
+      data: driveRes.data as unknown as Readable,
+      status: driveRes.status,
+      headers: (driveRes.headers ?? {}) as Record<string, string>,
+    };
+  }
 
   recordActivity({
     action: "download",
@@ -431,15 +651,17 @@ export async function trashFileById(
     .get();
 
   if (account && account.status !== "disconnected") {
-    const auth = await getAuthorizedClient(account);
+    if (account.provider === "google") {
+      const auth = await getAuthorizedClient(account);
 
-    try {
-      await trashFile({ auth, driveFileId: file.driveFileId });
-    } catch (error) {
-      const message = errorMessage(error);
+      try {
+        await trashFile({ auth, driveFileId: file.driveFileId });
+      } catch (error) {
+        const message = errorMessage(error);
 
-      if (!/not found|404/i.test(message)) {
-        throw error;
+        if (!/not found|404/i.test(message)) {
+          throw error;
+        }
       }
     }
   }
@@ -484,8 +706,10 @@ export async function restoreFileById(id: string): Promise<StoredFile> {
     .get();
 
   if (account && account.status !== "disconnected") {
-    const auth = await getAuthorizedClient(account);
-    await restoreFile({ auth, driveFileId: file.driveFileId });
+    if (account.provider === "google") {
+      const auth = await getAuthorizedClient(account);
+      await restoreFile({ auth, driveFileId: file.driveFileId });
+    }
   }
 
   const now = Date.now();
@@ -529,15 +753,27 @@ export async function deleteFilePermanentlyById(
     .get();
 
   if (account && account.status !== "disconnected") {
-    const auth = await getAuthorizedClient(account);
+    if (account.provider === "s3") {
+      try {
+        await deleteFromS3Backend(account, file.driveFileId);
+      } catch (error) {
+        const message = errorMessage(error);
 
-    try {
-      await removeFile({ auth, driveFileId: file.driveFileId });
-    } catch (error) {
-      const message = errorMessage(error);
+        if (!/not found|404/i.test(message)) {
+          throw error;
+        }
+      }
+    } else {
+      const auth = await getAuthorizedClient(account);
 
-      if (!/not found|404/i.test(message)) {
-        throw error;
+      try {
+        await removeFile({ auth, driveFileId: file.driveFileId });
+      } catch (error) {
+        const message = errorMessage(error);
+
+        if (!/not found|404/i.test(message)) {
+          throw error;
+        }
       }
     }
   }
@@ -594,8 +830,11 @@ export function getGlobalStats() {
     totalFreeBytes: Math.max(0, totalLimitBytes - totalUsedBytes),
     perAccount: visibleAccounts.map((account) => ({
       id: account.id,
+      provider: account.provider as "google" | "s3",
       email: account.email,
       displayName: account.displayName,
+      s3Endpoint: account.s3Endpoint,
+      s3Bucket: account.s3Bucket,
       status: account.status,
       quotaLimit: account.quotaLimit,
       quotaUsage: account.quotaUsage,

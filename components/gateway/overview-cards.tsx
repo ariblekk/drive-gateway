@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import {
+  IconBrandGoogle,
   IconChartPie,
   IconCloud,
+  IconDatabase,
   IconFileStack,
   IconUsers,
 } from "@tabler/icons-react";
@@ -26,8 +28,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ChartBarInteractive } from "@/components/chart-bar-interactive";
 
-import { apiGet, toMessage } from "./client";
+import {
+  apiGet,
+  FILES_CHANGED_EVENT,
+  STORAGE_CHANGED_EVENT,
+  toMessage,
+} from "./client";
 import { formatBytes, formatDate, quotaPercent } from "./format";
 import type { OverviewResponse } from "./types";
 
@@ -38,20 +46,28 @@ export function OverviewCards() {
   useEffect(() => {
     let active = true;
 
-    apiGet<OverviewResponse>("/api/admin/overview")
-      .then((response) => {
-        if (active) {
-          setData(response);
-        }
-      })
-      .catch((cause) => {
-        if (active) {
-          setError(toMessage(cause));
-        }
-      });
+    const load = () => {
+      apiGet<OverviewResponse>("/api/admin/overview")
+        .then((response) => {
+          if (active) {
+            setData(response);
+          }
+        })
+        .catch((cause) => {
+          if (active) {
+            setError(toMessage(cause));
+          }
+        });
+    };
+
+    load();
+    window.addEventListener(STORAGE_CHANGED_EVENT, load);
+    window.addEventListener(FILES_CHANGED_EVENT, load);
 
     return () => {
       active = false;
+      window.removeEventListener(STORAGE_CHANGED_EVENT, load);
+      window.removeEventListener(FILES_CHANGED_EVENT, load);
     };
   }, []);
 
@@ -152,21 +168,32 @@ export function OverviewCards() {
                 return (
                   <div key={account.id} className="flex flex-col gap-1.5">
                     <div className="flex items-start justify-between gap-2 text-xs">
-                      <div className="flex min-w-0 flex-col">
-                        {account.displayName ? (
-                          <>
+                      <div className="flex min-w-0 items-start gap-2">
+                        <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center border border-border bg-muted/40">
+                          {account.provider === "s3" ? (
+                            <IconDatabase className="size-3 text-blue-500" />
+                          ) : (
+                            <IconBrandGoogle className="size-3 text-amber-500" />
+                          )}
+                        </div>
+                        <div className="flex min-w-0 flex-col">
+                          <div className="flex items-center gap-1.5">
                             <span className="truncate font-medium">
-                              {account.displayName}
+                              {account.displayName ?? account.email}
                             </span>
-                            <span className="truncate text-muted-foreground">
-                              {account.email}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="truncate font-medium">
-                            {account.email}
+                            <Badge
+                              variant="outline"
+                              className="text-[9px] uppercase px-1 py-0 h-4"
+                            >
+                              {account.provider === "s3" ? "S3" : "Drive"}
+                            </Badge>
+                          </div>
+                          <span className="truncate text-xs text-muted-foreground">
+                            {account.provider === "s3"
+                              ? `${account.s3Bucket ?? "bucket"} @ ${account.s3Endpoint ?? ""}`
+                              : account.email}
                           </span>
-                        )}
+                        </div>
                       </div>
                       <span className="shrink-0 text-muted-foreground">
                         {formatBytes(account.quotaUsage)} /{" "}
@@ -231,6 +258,7 @@ export function OverviewCards() {
           </CardContent>
         </Card>
       </div>
+      <ChartBarInteractive traffic={data.traffic} />
     </div>
   );
 }

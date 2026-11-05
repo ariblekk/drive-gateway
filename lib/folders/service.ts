@@ -20,8 +20,9 @@ import {
   trashFile,
 } from "@/lib/google/drive";
 import { adjustTypeUsage } from "@/lib/google/usage";
+import { deleteFromS3Backend } from "@/lib/storage/s3-backend";
 
-function sanitizeFolderName(value: string): string {
+export function sanitizeFolderName(value: string): string {
   const name = value
     .trim()
     .replace(/[\\/]/g, "")
@@ -42,7 +43,7 @@ function getAllFolders(): Folder[] {
   return getDb().select().from(folders).all();
 }
 
-function buildFolderPathMap(all: Folder[]): Map<string, string> {
+export function buildFolderPathMap(all: Folder[]): Map<string, string> {
   const byId = new Map(all.map((folder) => [folder.id, folder]));
   const paths = new Map<string, string>();
 
@@ -138,6 +139,7 @@ export function listFolders(options: {
   parentId?: string | null;
   status?: string;
   all?: boolean;
+  bucketId?: string | null;
 }) {
   const all = getAllFolders();
   const paths = buildFolderPathMap(all);
@@ -145,6 +147,12 @@ export function listFolders(options: {
   const parentId = options.parentId ?? null;
 
   let result = all;
+
+  if (options.bucketId) {
+    result = result.filter(
+      (folder) => folder.bucketId === options.bucketId,
+    );
+  }
 
   if (!options.all) {
     result = result.filter((folder) => folder.parentId === parentId);
@@ -181,11 +189,13 @@ function assertActiveParent(parentId: string | null): void {
 function assertUniqueName(
   name: string,
   parentId: string | null,
+  bucketId: string,
   excludeId?: string,
 ): void {
   const siblings = getAllFolders().filter(
     (folder) =>
       folder.parentId === parentId &&
+      folder.bucketId === bucketId &&
       folder.status === "active" &&
       folder.id !== excludeId,
   );
@@ -238,6 +248,15 @@ function folderDepth(all: Folder[], id: string): number {
   return depth;
 }
 
+function objectKeyFromPath(
+  virtualPath: string,
+  name: string,
+): string {
+  const prefix = virtualPath.replace(/^\/+|\/+$/g, "");
+
+  return prefix ? `${prefix}/${name}` : name;
+}
+
 function refreshPathsForTree(rootId: string): void {
   const all = getAllFolders();
   const paths = buildFolderPathMap(all);
@@ -245,10 +264,22 @@ function refreshPathsForTree(rootId: string): void {
   const db = getDb();
 
   for (const folderId of ids) {
-    db.update(files)
-      .set({ path: paths.get(folderId) ?? "/" })
+    const folderPath = paths.get(folderId) ?? "/";
+    const rows = db
+      .select({ id: files.id, name: files.name })
+      .from(files)
       .where(eq(files.folderId, folderId))
-      .run();
+      .all();
+
+    for (const row of rows) {
+      db.update(files)
+        .set({
+          path: folderPath,
+          key: objectKeyFromPath(folderPath, row.name),
+        })
+        .where(eq(files.id, row.id))
+        .run();
+    }
   }
 }
 
@@ -268,20 +299,26 @@ async function moveDriveFiles(
       continue;
     }
 
-    let auth = authCache.get(account.id);
-
-    if (!auth) {
-      auth = await getAuthorizedClient(account);
-      authCache.set(account.id, auth);
-    }
-
     try {
-      if (operation === "trash") {
-        await trashFile({ auth, driveFileId: file.driveFileId });
-      } else if (operation === "restore") {
-        await restoreFile({ auth, driveFileId: file.driveFileId });
+      if (account.provider === "s3") {
+        if (operation === "remove") {
+          await deleteFromS3Backend(account, file.driveFileId);
+        }
       } else {
-        await removeFile({ auth, driveFileId: file.driveFileId });
+        let auth = authCache.get(account.id);
+
+        if (!auth) {
+          auth = await getAuthorizedClient(account);
+          authCache.set(account.id, auth);
+        }
+
+        if (operation === "trash") {
+          await trashFile({ auth, driveFileId: file.driveFileId });
+        } else if (operation === "restore") {
+          await restoreFile({ auth, driveFileId: file.driveFileId });
+        } else {
+          await removeFile({ auth, driveFileId: file.driveFileId });
+        }
       }
     } catch (error) {
       const message = errorMessage(error);
@@ -303,18 +340,26 @@ async function moveDriveFiles(
 export function createFolder(input: {
   name: string;
   parentId?: string | null;
+  bucketId?: string;
 }) {
   const name = sanitizeFolderName(input.name);
   const parentId = input.parentId ?? null;
+  let bucketId = input.bucketId ?? "default";
+
+  if (parentId) {
+    const parent = getFolderById(parentId);
+    bucketId = parent.bucketId;
+  }
 
   assertActiveParent(parentId);
-  assertUniqueName(name, parentId);
+  assertUniqueName(name, parentId, bucketId);
 
   const now = Date.now();
   const folder: Folder = {
     id: crypto.randomUUID(),
     name,
     parentId,
+    bucketId,
     status: "active",
     createdAt: now,
     updatedAt: now,
@@ -331,13 +376,13 @@ export function renameFolder(id: string, nameInput: string) {
   if (folder.status !== "active") {
     throw new GatewayError(
       "bad_request",
-      "Cannot rename a trashed folder",
+      "Cannot rename a folder that is not active",
       400,
     );
   }
 
   const name = sanitizeFolderName(nameInput);
-  assertUniqueName(name, folder.parentId, id);
+  assertUniqueName(name, folder.parentId, folder.bucketId, id);
 
   const now = Date.now();
 
@@ -437,6 +482,20 @@ export function moveFilesToFolder(
     .set({ folderId, path, updatedAt: now })
     .where(and(inArray(files.id, ids), eq(files.status, "active")))
     .run();
+
+  const rows = getDb()
+    .select({ id: files.id, name: files.name })
+    .from(files)
+    .where(and(inArray(files.id, ids), eq(files.status, "active")))
+    .all();
+
+  for (const row of rows) {
+    getDb()
+      .update(files)
+      .set({ key: objectKeyFromPath(path, row.name) })
+      .where(eq(files.id, row.id))
+      .run();
+  }
 
   recordActivity({
     action: "move",

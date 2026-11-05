@@ -2,11 +2,16 @@ import { eq } from "drizzle-orm";
 
 import { getDb, googleAccounts, type GoogleAccount } from "@/lib/db";
 import { errorMessage } from "@/lib/errors";
+import { syncS3BackendQuota } from "@/lib/storage/s3-backend";
 import { createDriveClient, getAuthorizedClient } from "./client";
 
 export async function syncAccountQuota(
   account: GoogleAccount,
 ): Promise<GoogleAccount> {
+  if (account.provider === "s3") {
+    return syncS3BackendQuota(account);
+  }
+
   const auth = await getAuthorizedClient(account);
   const drive = createDriveClient(auth);
   const { data } = await drive.about.get({ fields: "storageQuota" });

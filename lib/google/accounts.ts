@@ -56,6 +56,13 @@ export function upsertGoogleAccount(input: {
 
   const account: GoogleAccount = {
     id: crypto.randomUUID(),
+    provider: "google",
+    s3Endpoint: null,
+    s3Bucket: null,
+    s3Region: "us-east-1",
+    s3AccessKeyId: null,
+    s3SecretCiphertext: null,
+    s3ForcePathStyle: 1,
     quotaLimit: null,
     quotaUsage: 0,
     quotaUsageInDrive: 0,

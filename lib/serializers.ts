@@ -8,9 +8,13 @@ import type {
 export function publicAccount(account: GoogleAccount) {
   return {
     id: account.id,
+    provider: account.provider,
     email: account.email,
     displayName: account.displayName,
     pictureUrl: account.pictureUrl,
+    s3Endpoint: account.s3Endpoint,
+    s3Bucket: account.s3Bucket,
+    s3Region: account.s3Region,
     status: account.status,
     quotaLimit: account.quotaLimit,
     quotaUsage: account.quotaUsage,
@@ -33,6 +37,8 @@ export function publicFile(file: StoredFile) {
     mimeType: file.mimeType,
     size: file.size,
     path: file.path,
+    bucketId: file.bucketId,
+    key: file.key,
     status: file.status,
     createdAt: file.createdAt,
     updatedAt: file.updatedAt,

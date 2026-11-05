@@ -10,7 +10,15 @@ export async function uploadFromPath(input: {
   filePath: string;
   name: string;
   mimeType: string;
-}): Promise<{ id?: string | null; name?: string | null; size?: string | null }> {
+}): Promise<{
+  id?: string | null;
+  name?: string | null;
+  mimeType?: string | null;
+  size?: string | null;
+  md5Checksum?: string | null;
+  sha256Checksum?: string | null;
+  modifiedTime?: string | null;
+}> {
   const drive = createDriveClient(input.auth);
 
   const response = await drive.files.create({
@@ -19,7 +27,25 @@ export async function uploadFromPath(input: {
       mimeType: input.mimeType,
       body: fs.createReadStream(input.filePath),
     },
-    fields: "id,name,mimeType,size",
+    fields:
+      "id,name,mimeType,size,md5Checksum,sha256Checksum,modifiedTime",
+  });
+
+  return response.data;
+}
+
+export async function getFileChecksum(input: {
+  auth: OAuth2Client;
+  driveFileId: string;
+}): Promise<{
+  md5Checksum?: string | null;
+  sha256Checksum?: string | null;
+}> {
+  const drive = createDriveClient(input.auth);
+
+  const response = await drive.files.get({
+    fileId: input.driveFileId,
+    fields: "id,md5Checksum,sha256Checksum",
   });
 
   return response.data;

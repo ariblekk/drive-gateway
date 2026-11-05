@@ -15,6 +15,7 @@ const ROUTE_TITLES: Record<string, string> = {
   "/dashboard/accounts": "Accounts & Quota",
   "/dashboard/activity": "Activity Log",
   "/dashboard/api-keys": "API Keys",
+  "/docs": "API Documentation",
 };
 
 interface HeaderContextValue {

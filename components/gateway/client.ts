@@ -131,6 +131,7 @@ export function apiUploadWithProgress<T>(
 interface FileUploadOptions {
   name?: string;
   folderId?: string | null;
+  bucketId?: string | null;
   onProgress?: (percent: number) => void;
 }
 
@@ -145,6 +146,10 @@ export function apiUploadFileWithProgress<T>(
 
     if (options.folderId) {
       params.set("folderId", options.folderId);
+    }
+
+    if (options.bucketId) {
+      params.set("bucketId", options.bucketId);
     }
 
     const mimeType = file.type || "application/octet-stream";

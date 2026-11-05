@@ -1,20 +1,17 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { toast } from "sonner"
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
+  IconApi,
   IconDotsVertical,
   IconKey,
   IconLogout,
   IconSettings,
-} from "@tabler/icons-react"
+} from "@tabler/icons-react";
 
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,31 +20,31 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
 export function NavUser({
   user,
 }: {
   user: {
-    name: string
-    email: string
-    avatar: string
-  }
+    name: string;
+    email: string;
+    avatar: string;
+  };
 }) {
-  const { isMobile } = useSidebar()
-  const router = useRouter()
+  const { isMobile } = useSidebar();
+  const router = useRouter();
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" })
-    toast.success("Signed out")
-    router.replace("/login")
-    router.refresh()
+    await fetch("/api/auth/logout", { method: "POST" });
+    toast.success("Signed out");
+    router.replace("/login");
+    router.refresh();
   }
 
   return (
@@ -97,7 +94,13 @@ export function NavUser({
               <DropdownMenuItem asChild>
                 <Link href="/dashboard/api-keys">
                   <IconKey />
-                  API Keys
+                  Credentials
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/docs" target="_blank">
+                  <IconApi />
+                  API Docs (Swagger)
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
@@ -116,5 +119,5 @@ export function NavUser({
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  )
+  );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { IconCopy, IconPlus, IconTrash } from "@tabler/icons-react";
+import Link from "next/link";
+import { IconApi, IconCopy, IconPlus, IconTrash } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import {
@@ -36,6 +37,7 @@ import {
 
 import { apiGet, apiSend, toMessage } from "./client";
 import { formatDate } from "./format";
+import { S3CredentialsCard } from "./s3-credentials-card";
 import type { ApiKeyItem } from "./types";
 
 export function ApiKeysView() {
@@ -54,7 +56,7 @@ export function ApiKeysView() {
 
   const load = useCallback(async () => {
     const data = await fetchKeys();
-    setKeys(data.apiKeys);
+    setKeys([...data.apiKeys].sort((a, b) => b.createdAt - a.createdAt));
   }, [fetchKeys]);
 
   useEffect(() => {
@@ -63,7 +65,9 @@ export function ApiKeysView() {
     fetchKeys()
       .then((data) => {
         if (active) {
-          setKeys(data.apiKeys);
+          setKeys(
+            [...data.apiKeys].sort((a, b) => b.createdAt - a.createdAt),
+          );
         }
       })
       .catch((cause) => {
@@ -139,11 +143,19 @@ export function ApiKeysView() {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader>
-          <CardTitle>Create API key</CardTitle>
-          <CardDescription>
-            Use these keys with the public <code>/api/v1</code> endpoints.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+          <div>
+            <CardTitle>Create API key</CardTitle>
+            <CardDescription>
+              Use these keys with the public <code>/api/v1</code> endpoints.
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/docs" target="_blank">
+              <IconApi />
+              <span>Swagger Docs</span>
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent>
           <form
@@ -176,7 +188,11 @@ export function ApiKeysView() {
                 <code className="flex-1 overflow-x-auto bg-background px-2 py-1 text-xs">
                   {createdKey}
                 </code>
-                <Button variant="outline" size="sm" onClick={() => void copyKey()}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void copyKey()}
+                >
                   <IconCopy />
                   Copy
                 </Button>
@@ -190,15 +206,6 @@ export function ApiKeysView() {
             </div>
           )}
         </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>API keys</CardTitle>
-          <CardDescription>
-            Keys are hashed at rest. Revoked keys stop working immediately.
-          </CardDescription>
-        </CardHeader>
         <CardContent>
           {keys === null ? (
             <Skeleton className="h-32 w-full" />
@@ -258,6 +265,8 @@ export function ApiKeysView() {
         </CardContent>
       </Card>
 
+      <S3CredentialsCard />
+
       <AlertDialog
         open={keyToRevoke !== null}
         onOpenChange={(open) => {
@@ -270,15 +279,12 @@ export function ApiKeysView() {
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke API key?</AlertDialogTitle>
             <AlertDialogDescription>
-              “{keyToRevoke?.name}” will stop working immediately.
-              Requests using this key will be rejected with 401. This
-              cannot be undone.
+              “{keyToRevoke?.name}” will stop working immediately. Requests
+              using this key will be rejected with 401. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={revoking}>
-              Cancel
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={revoking}

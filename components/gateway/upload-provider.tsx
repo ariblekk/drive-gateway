@@ -10,7 +10,10 @@ import {
 import { UploadDialog } from "./upload-dialog";
 
 interface UploadDialogContextValue {
-  openUploadDialog: (folderId?: string | null) => void;
+  openUploadDialog: (
+    folderId?: string | null,
+    bucketId?: string | null,
+  ) => void;
 }
 
 const UploadDialogContext =
@@ -25,10 +28,17 @@ export function UploadDialogProvider({
   const [defaultFolderId, setDefaultFolderId] = useState<
     string | null
   >(null);
+  const [defaultBucketId, setDefaultBucketId] = useState<
+    string | null
+  >(null);
   const [dialogKey, setDialogKey] = useState(0);
 
-  const openUploadDialog = (folderId: string | null = null) => {
+  const openUploadDialog = (
+    folderId: string | null = null,
+    bucketId: string | null = null,
+  ) => {
     setDefaultFolderId(folderId);
+    setDefaultBucketId(bucketId);
     setDialogKey((key) => key + 1);
     setOpen(true);
   };
@@ -41,6 +51,7 @@ export function UploadDialogProvider({
         open={open}
         onOpenChange={setOpen}
         defaultFolderId={defaultFolderId}
+        defaultBucketId={defaultBucketId}
       />
     </UploadDialogContext.Provider>
   );

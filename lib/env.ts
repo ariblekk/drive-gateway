@@ -20,6 +20,12 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(50 * 1024 * 1024),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_MAX_PUT_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(1024 * 1024 * 1024),
 });
 
 export type Env = z.infer<typeof envSchema>;

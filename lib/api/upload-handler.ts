@@ -87,6 +87,11 @@ export async function handleUploadRequest(
       folderIdRaw !== "root"
         ? folderIdRaw
         : null;
+    const bucketIdRaw = form.get("bucketId");
+    const bucketId =
+      typeof bucketIdRaw === "string" && bucketIdRaw.trim()
+        ? bucketIdRaw.trim()
+        : "default";
 
     const stored = await saveUpload({
       data: file.stream(),
@@ -95,6 +100,7 @@ export async function handleUploadRequest(
       mimeType: file.type || "application/octet-stream",
       path: virtualPath,
       folderId,
+      bucketId,
       apiKeyId,
     });
 
@@ -121,6 +127,10 @@ export async function handleUploadRequest(
     searchParams.get("folderId") ?? request.headers.get("x-folder-id");
   const folderId =
     rawFolderId && rawFolderId !== "root" ? rawFolderId : null;
+  const rawBucketId =
+    searchParams.get("bucketId") ?? request.headers.get("x-bucket-id");
+  const bucketId =
+    rawBucketId && rawBucketId.trim() ? rawBucketId.trim() : "default";
 
   const stored = await saveUpload({
     data: limitUpload(request.body, env.MAX_UPLOAD_BYTES),
@@ -134,6 +144,7 @@ export async function handleUploadRequest(
       request.headers.get("x-file-path") ??
       "/",
     folderId,
+    bucketId,
     apiKeyId,
   });
 

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
+  IconBrandGoogle,
+  IconDatabase,
   IconDotsVertical,
   IconPlayerPause,
   IconPlayerPlay,
@@ -12,6 +14,16 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -22,6 +34,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +50,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -74,6 +104,20 @@ export function AccountsView() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const { setActions } = useHeader();
+
+  const [connectS3Open, setConnectS3Open] = useState(false);
+  const [connectingS3, setConnectingS3] = useState(false);
+  const [s3Name, setS3Name] = useState("");
+  const [s3Endpoint, setS3Endpoint] = useState("");
+  const [s3Bucket, setS3Bucket] = useState("");
+  const [s3Region, setS3Region] = useState("us-east-1");
+  const [s3AccessKeyId, setS3AccessKeyId] = useState("");
+  const [s3SecretAccessKey, setS3SecretAccessKey] = useState("");
+  const [s3QuotaValue, setS3QuotaValue] = useState("");
+  const [s3QuotaUnit, setS3QuotaUnit] = useState<"GB" | "TB">("GB");
+  const [s3ForcePathStyle, setS3ForcePathStyle] = useState(true);
+  const [accountToDisconnect, setAccountToDisconnect] = useState<Account | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const fetchAccounts = useCallback(
     () => apiGet<{ accounts: Account[] }>("/api/admin/accounts"),
@@ -141,27 +185,29 @@ export function AccountsView() {
     }
   };
 
-  const disconnectAccount = async (account: Account) => {
-    if (
-      !window.confirm(
-        `Disconnect ${account.email}? Stored files stay in Google Drive, but this account will no longer be used.`,
-      )
-    ) {
+  const confirmDisconnect = async () => {
+    if (!accountToDisconnect) {
       return;
     }
 
-    setBusy(account.id);
+    setDisconnecting(true);
     setError(null);
 
     try {
-      await apiSend(`/api/admin/accounts/${account.id}`, "DELETE");
+      await apiSend(
+        `/api/admin/accounts/${accountToDisconnect.id}`,
+        "DELETE",
+      );
       await load();
       notifyStorageChanged();
-      toast.success(`Disconnected ${account.email}`);
+      toast.success(
+        `Disconnected ${accountToDisconnect.displayName ?? accountToDisconnect.email}`,
+      );
+      setAccountToDisconnect(null);
     } catch (cause) {
       toast.error(toMessage(cause));
     } finally {
-      setBusy(null);
+      setDisconnecting(false);
     }
   };
 
@@ -181,6 +227,61 @@ export function AccountsView() {
     }
   }, [load]);
 
+  const handleConnectS3 = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (
+      !s3Name.trim() ||
+      !s3Endpoint.trim() ||
+      !s3Bucket.trim() ||
+      !s3AccessKeyId.trim() ||
+      !s3SecretAccessKey.trim()
+    ) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    const numQuota = Number(s3QuotaValue);
+    const quotaLimit =
+      s3QuotaValue.trim() && Number.isFinite(numQuota) && numQuota > 0
+        ? Math.floor(
+            numQuota *
+              (s3QuotaUnit === "TB"
+                ? 1024 * 1024 * 1024 * 1024
+                : 1024 * 1024 * 1024),
+          )
+        : null;
+
+    setConnectingS3(true);
+
+    try {
+      await apiSend("/api/admin/accounts/s3", "POST", {
+        name: s3Name.trim(),
+        endpoint: s3Endpoint.trim(),
+        bucket: s3Bucket.trim(),
+        region: s3Region.trim() || "us-east-1",
+        accessKeyId: s3AccessKeyId.trim(),
+        secretAccessKey: s3SecretAccessKey.trim(),
+        quotaLimit,
+        forcePathStyle: s3ForcePathStyle,
+      });
+
+      toast.success(`Connected S3 storage "${s3Name.trim()}"`);
+      setConnectS3Open(false);
+      setS3Name("");
+      setS3Endpoint("");
+      setS3Bucket("");
+      setS3AccessKeyId("");
+      setS3SecretAccessKey("");
+      setS3QuotaValue("");
+      await load();
+      notifyStorageChanged();
+    } catch (cause) {
+      toast.error(toMessage(cause));
+    } finally {
+      setConnectingS3(false);
+    }
+  };
+
   useEffect(() => {
     setActions(
       <ButtonGroup>
@@ -194,12 +295,26 @@ export function AccountsView() {
           <IconRefresh />
           <span className="hidden sm:inline">Sync quotas</span>
         </Button>
-        <Button asChild size="sm" aria-label="Connect account">
-          <a href="/api/auth/google/start">
-            <IconPlus />
-            <span className="hidden sm:inline">Connect account</span>
-          </a>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" aria-label="Connect account">
+              <IconPlus />
+              <span className="hidden sm:inline">Connect account</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <a href="/api/auth/google/start">
+                <IconBrandGoogle />
+                Google Drive
+              </a>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setConnectS3Open(true)}>
+              <IconDatabase />
+              S3 Storage
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </ButtonGroup>,
     );
 
@@ -212,10 +327,10 @@ export function AccountsView() {
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Google accounts</CardTitle>
+          <CardTitle>Connected accounts</CardTitle>
           <CardDescription>
-            Connect multiple Google Drive accounts. Uploads go to the account
-            with the most free space.
+            Google Drive & S3 accounts (Cloudflare R2, MinIO, Wasabi, AWS S3).
+            Uploads go to the account with the most free space.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -262,13 +377,32 @@ export function AccountsView() {
                   return (
                     <TableRow key={account.id}>
                       <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">
-                            {account.displayName ?? account.email}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {account.email}
-                          </span>
+                        <div className="flex items-start gap-2.5">
+                          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center border border-border bg-muted/40">
+                            {account.provider === "s3" ? (
+                              <IconDatabase className="size-3.5 text-blue-500" />
+                            ) : (
+                              <IconBrandGoogle className="size-3.5 text-amber-500" />
+                            )}
+                          </div>
+                          <div className="flex min-w-0 flex-col">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-medium">
+                                {account.displayName ?? account.email}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] uppercase"
+                              >
+                                {account.provider === "s3" ? "S3" : "Drive"}
+                              </Badge>
+                            </div>
+                            <span className="truncate text-xs text-muted-foreground">
+                              {account.provider === "s3"
+                                ? `${account.s3Bucket} @ ${account.s3Endpoint}`
+                                : account.email}
+                            </span>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -344,7 +478,7 @@ export function AccountsView() {
                                   <DropdownMenuItem
                                     variant="destructive"
                                     onSelect={() =>
-                                      void disconnectAccount(account)
+                                      setAccountToDisconnect(account)
                                     }
                                     disabled={busy === account.id}
                                   >
@@ -365,6 +499,195 @@ export function AccountsView() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={connectS3Open} onOpenChange={setConnectS3Open}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect S3 Storage</DialogTitle>
+            <DialogDescription>
+              Add an S3-compatible backend (Cloudflare R2, MinIO, Wasabi, AWS S3).
+              The gateway will test the connection before saving.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="flex flex-col gap-3" onSubmit={handleConnectS3}>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="s3-backend-name" className="text-xs font-medium">
+                Account name
+              </label>
+              <Input
+                id="s3-backend-name"
+                value={s3Name}
+                onChange={(e) => setS3Name(e.target.value)}
+                placeholder="Cloudflare R2 Free"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="s3-backend-endpoint" className="text-xs font-medium">
+                Endpoint URL
+              </label>
+              <Input
+                id="s3-backend-endpoint"
+                value={s3Endpoint}
+                onChange={(e) => setS3Endpoint(e.target.value)}
+                placeholder="https://<account_id>.r2.cloudflarestorage.com"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="s3-backend-bucket" className="text-xs font-medium">
+                  Bucket name
+                </label>
+                <Input
+                  id="s3-backend-bucket"
+                  value={s3Bucket}
+                  onChange={(e) => setS3Bucket(e.target.value)}
+                  placeholder="my-bucket"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="s3-backend-region" className="text-xs font-medium">
+                  Region
+                </label>
+                <Input
+                  id="s3-backend-region"
+                  value={s3Region}
+                  onChange={(e) => setS3Region(e.target.value)}
+                  placeholder="auto or us-east-1"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="s3-backend-access-key" className="text-xs font-medium">
+                Access Key ID
+              </label>
+              <Input
+                id="s3-backend-access-key"
+                value={s3AccessKeyId}
+                onChange={(e) => setS3AccessKeyId(e.target.value)}
+                placeholder="Access key"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="s3-backend-secret-key" className="text-xs font-medium">
+                Secret Access Key
+              </label>
+              <Input
+                id="s3-backend-secret-key"
+                type="password"
+                value={s3SecretAccessKey}
+                onChange={(e) => setS3SecretAccessKey(e.target.value)}
+                placeholder="Secret access key"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium">
+                Storage Quota (for routing)
+              </label>
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={s3QuotaValue}
+                  onChange={(e) => setS3QuotaValue(e.target.value)}
+                  placeholder="Unlimited"
+                  className="flex-1"
+                />
+                <Select
+                  value={s3QuotaUnit}
+                  onValueChange={(val) =>
+                    setS3QuotaUnit(val as "GB" | "TB")
+                  }
+                >
+                  <SelectTrigger className="w-18">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="GB">GB</SelectItem>
+                      <SelectItem value="TB">TB</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Checkbox
+                id="s3-backend-path-style"
+                checked={s3ForcePathStyle}
+                onCheckedChange={(val) => setS3ForcePathStyle(Boolean(val))}
+              />
+              <label
+                htmlFor="s3-backend-path-style"
+                className="text-xs text-muted-foreground cursor-pointer"
+              >
+                Use path-style addressing (MinIO, Ceph, Localstack)
+              </label>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConnectS3Open(false)}
+                disabled={connectingS3}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={connectingS3}>
+                {connectingS3 ? "Testing & Connecting…" : "Connect"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={accountToDisconnect !== null}
+        onOpenChange={(open) => {
+          if (!open && !disconnecting) {
+            setAccountToDisconnect(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Disconnect {accountToDisconnect?.displayName ?? accountToDisconnect?.email}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Stored files will remain on the remote storage, but this account will no longer be used by the gateway. If there are still active files or files in the Recycle Bin on this account, the gateway will prevent disconnection.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={disconnecting}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={disconnecting}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDisconnect();
+              }}
+            >
+              {disconnecting ? "Disconnecting…" : "Disconnect"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

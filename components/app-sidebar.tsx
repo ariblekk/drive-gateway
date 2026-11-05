@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import {
+  IconCloudComputing,
   IconChartPie,
   IconCloud,
   IconFileStack,
   IconHistory,
-  IconInnerShadowTop,
   IconTrash,
 } from "@tabler/icons-react";
 
@@ -69,7 +69,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="data-[slot=sidebar-menu-button]:p-1.5! group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2!"
             >
               <Link href="/dashboard">
-                <IconInnerShadowTop className="size-5!" />
+                <IconCloudComputing className="size-5!" />
                 <span className="text-base font-semibold group-data-[collapsible=icon]:hidden">
                   Drive Gateway
                 </span>

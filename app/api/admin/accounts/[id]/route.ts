@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { handleRouteError, json } from "@/lib/api/response";
-import { getDb, googleAccounts } from "@/lib/db";
+import { files, getDb, googleAccounts } from "@/lib/db";
 import { GatewayError } from "@/lib/errors";
-import { disconnectGoogleAccount } from "@/lib/google/accounts";
+import { formatBytes } from "@/lib/format";
 import { getAccountById } from "@/lib/files/service";
+import { disconnectGoogleAccount } from "@/lib/google/accounts";
 import { publicAccount } from "@/lib/serializers";
 
 export async function PATCH(
@@ -55,6 +56,47 @@ export async function DELETE(
   try {
     const { id } = await params;
     getAccountById(id);
+
+    const db = getDb();
+    const activeFileStats = db
+      .select({
+        count: sql<number>`count(*)`,
+        size: sql<number>`coalesce(sum(${files.size}), 0)`,
+      })
+      .from(files)
+      .where(and(eq(files.accountId, id), eq(files.status, "active")))
+      .get();
+
+    const activeCount = Number(activeFileStats?.count ?? 0);
+    const activeSize = Number(activeFileStats?.size ?? 0);
+
+    if (activeCount > 0) {
+      throw new GatewayError(
+        "account_has_files",
+        `Tidak bisa disconnect: akun ini masih menyimpan ${activeCount} file aktif (${formatBytes(activeSize)}). Hapus atau pindahkan file terlebih dahulu, atau gunakan fitur Pause.`,
+        409,
+      );
+    }
+
+    const trashedFileStats = db
+      .select({
+        count: sql<number>`count(*)`,
+        size: sql<number>`coalesce(sum(${files.size}), 0)`,
+      })
+      .from(files)
+      .where(and(eq(files.accountId, id), eq(files.status, "trashed")))
+      .get();
+
+    const trashedCount = Number(trashedFileStats?.count ?? 0);
+    const trashedSize = Number(trashedFileStats?.size ?? 0);
+
+    if (trashedCount > 0) {
+      throw new GatewayError(
+        "account_has_trashed_files",
+        `Tidak bisa disconnect: akun ini memiliki ${trashedCount} file di Recycle Bin (${formatBytes(trashedSize)}). Hapus permanen file tersebut terlebih dahulu, atau gunakan fitur Pause.`,
+        409,
+      );
+    }
 
     const account = disconnectGoogleAccount(id);
 

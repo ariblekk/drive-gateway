@@ -1,8 +1,12 @@
 export interface Account {
   id: string;
+  provider: "google" | "s3";
   email: string;
   displayName: string | null;
   pictureUrl: string | null;
+  s3Endpoint?: string | null;
+  s3Bucket?: string | null;
+  s3Region?: string | null;
   status: string;
   quotaLimit: number | null;
   quotaUsage: number;
@@ -16,8 +20,11 @@ export interface Account {
 
 export interface AccountStats {
   id: string;
+  provider?: "google" | "s3";
   email: string;
   displayName: string | null;
+  s3Endpoint?: string | null;
+  s3Bucket?: string | null;
   status: string;
   quotaLimit: number | null;
   quotaUsage: number;
@@ -64,6 +71,16 @@ export interface FileItem {
   createdAt: number;
   updatedAt: number;
   accountEmail?: string | null;
+  bucketId?: string;
+  key?: string;
+}
+
+export interface BucketItem {
+  id: string;
+  name: string;
+  createdAt: number;
+  objectCount: number;
+  totalBytes: number;
 }
 
 export interface ApiKeyItem {
@@ -72,6 +89,19 @@ export interface ApiKeyItem {
   keyPrefix: string;
   lastUsedAt: number | null;
   revokedAt: number | null;
+  createdAt: number;
+}
+
+export interface S3CredentialItem {
+  id: string;
+  name: string;
+  accessKeyId: string;
+  bucketId: string;
+  permission: string;
+  maxStorageBytes: number | null;
+  usedStorageBytes?: number;
+  status: string;
+  lastUsedAt: number | null;
   createdAt: number;
 }
 
@@ -88,9 +118,16 @@ export interface ActivityItem {
   accountEmail?: string | null;
 }
 
+export interface DailyTrafficItem {
+  date: string;
+  uploadBytes: number;
+  downloadBytes: number;
+}
+
 export interface OverviewResponse {
   stats: Stats;
   recentActivity: ActivityItem[];
+  traffic: DailyTrafficItem[];
 }
 
 export interface StorageCategory {

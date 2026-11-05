@@ -22,6 +22,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -58,13 +59,17 @@ export function UploadDialog({
   open,
   onOpenChange,
   defaultFolderId = null,
+  defaultBucketId = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultFolderId?: string | null;
+  defaultBucketId?: string | null;
 }) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [folderId, setFolderId] = useState(defaultFolderId ?? "root");
+  const [bucketId, setBucketId] = useState(defaultBucketId ?? "default");
+  const [buckets, setBuckets] = useState<Array<{ name: string }>>([]);
   const [folders, setFolders] = useState<FolderOption[] | null>(null);
   const [maxUploadBytes, setMaxUploadBytes] = useState<number | null>(
     null,
@@ -85,7 +90,7 @@ export function UploadDialog({
     let active = true;
 
     apiGet<{ folders: FolderOption[] }>(
-      "/api/admin/folders?all=1&status=active",
+      `/api/admin/folders?all=1&status=active&bucketId=${encodeURIComponent(bucketId)}`,
     )
       .then((data) => {
         if (active) {
@@ -98,6 +103,14 @@ export function UploadDialog({
         }
       });
 
+    apiGet<{ buckets: Array<{ name: string }> }>("/api/admin/buckets")
+      .then((data) => {
+        if (active) {
+          setBuckets(data.buckets);
+        }
+      })
+      .catch(() => undefined);
+
     apiGet<{ maxUploadBytes: number }>("/api/admin/config")
       .then((data) => {
         if (active) {
@@ -109,7 +122,7 @@ export function UploadDialog({
     return () => {
       active = false;
     };
-  }, [open]);
+  }, [open, bucketId]);
 
   const totalSelectedBytes = selectedFiles.reduce(
     (sum, file) => sum + file.size,
@@ -255,6 +268,7 @@ export function UploadDialog({
           await apiUploadFileWithProgress("/api/admin/upload", file, {
             name: file.name,
             folderId: folderId === "root" ? null : folderId,
+            bucketId,
             onProgress: (percent) => {
               setFileProgress(file, {
                 status: "uploading",
@@ -513,27 +527,55 @@ export function UploadDialog({
             </div>
           )}
 
-          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              <span className="text-xs font-medium">Folder</span>
-              <Select value={folderId} onValueChange={setFolderId}>
-                <SelectTrigger disabled={uploading}>
-                  <SelectValue placeholder="Root" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium">Bucket</span>
+              <Select
+                value={bucketId}
+                onValueChange={(val) => {
+                  setBucketId(val);
+                  setFolderId("root");
+                }}
+              >
+                <SelectTrigger className="w-full" disabled={uploading}>
+                  <SelectValue placeholder="Bucket" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="root">/ (Root)</SelectItem>
-                  {folders?.map((folder) => (
-                    <SelectItem key={folder.id} value={folder.id}>
-                      {folder.path}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {buckets.map((b) => (
+                      <SelectItem key={b.name} value={b.name}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium">Folder</span>
+              <Select value={folderId} onValueChange={setFolderId}>
+                <SelectTrigger className="w-full" disabled={uploading}>
+                  <SelectValue placeholder="Root" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="root">/ (Root)</SelectItem>
+                    {folders?.map((folder) => (
+                      <SelectItem key={folder.id} value={folder.id}>
+                        {folder.path}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
             <Button
               type="submit"
               disabled={uploading || selectedFiles.length === 0}
-              className="shrink-0 sm:ml-auto"
             >
               <IconUpload />
               {uploading

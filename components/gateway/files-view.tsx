@@ -10,6 +10,7 @@ import {
   IconFolder,
   IconFolderPlus,
   IconPencil,
+  IconPlus,
   IconRestore,
   IconSearch,
   IconTrash,
@@ -60,6 +61,7 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -87,6 +89,7 @@ import { useHeader } from "./header-provider";
 import { useUploadDialog } from "./upload-provider";
 import type {
   Breadcrumb as BreadcrumbData,
+  BucketItem,
   FileItem,
   FolderItem,
 } from "./types";
@@ -143,15 +146,25 @@ export function FilesView({
   const [moveFilesOpen, setMoveFilesOpen] = useState(false);
   const [moveFolderId, setMoveFolderId] = useState("root");
   const [allFolders, setAllFolders] = useState<FolderItem[]>([]);
+  const [buckets, setBuckets] = useState<BucketItem[]>([]);
+  const [selectedBucket, setSelectedBucket] = useState("default");
+  const [newBucketOpen, setNewBucketOpen] = useState(false);
+  const [newBucketName, setNewBucketName] = useState("");
+  const [creatingBucket, setCreatingBucket] = useState(false);
   const { openUploadDialog } = useUploadDialog();
   const { setActions, setCount, setCustomTitle } = useHeader();
 
+  const fetchBuckets = useCallback(async () => {
+    return apiGet<{ buckets: BucketItem[] }>("/api/admin/buckets");
+  }, []);
+
   const fetchFolders = useCallback(async () => {
+    const bucketParam = `&bucketId=${encodeURIComponent(selectedBucket)}`;
     if (isTrash) {
       return apiGet<{
         folders: FolderItem[];
         breadcrumbs: BreadcrumbData[];
-      }>("/api/admin/folders?all=1&status=trashed");
+      }>(`/api/admin/folders?all=1&status=trashed${bucketParam}`);
     }
 
     return apiGet<{
@@ -160,9 +173,9 @@ export function FilesView({
     }>(
       `/api/admin/folders?parentId=${encodeURIComponent(
         currentFolderId ?? "root",
-      )}&status=active`,
+      )}&status=active${bucketParam}`,
     );
-  }, [currentFolderId, isTrash]);
+  }, [currentFolderId, isTrash, selectedBucket]);
 
   const fetchFiles = useCallback(
     (query: string) => {
@@ -170,6 +183,7 @@ export function FilesView({
       params.set("status", mode);
       params.set("limit", String(PAGE_SIZE));
       params.set("offset", String(offset));
+      params.set("bucketId", selectedBucket);
 
       if (!isTrash) {
         params.set("folderId", currentFolderId ?? "root");
@@ -183,31 +197,38 @@ export function FilesView({
         `/api/admin/files?${params.toString()}`,
       );
     },
-    [currentFolderId, isTrash, mode, offset],
+    [currentFolderId, isTrash, mode, offset, selectedBucket],
   );
 
   const load = useCallback(async () => {
-    const [folderData, fileData] = await Promise.all([
+    const [folderData, fileData, bucketData] = await Promise.all([
       fetchFolders(),
       fetchFiles(appliedQ),
+      fetchBuckets(),
     ]);
 
     setFolders(folderData.folders);
     setBreadcrumbs(folderData.breadcrumbs);
     setFiles(fileData.files);
     setTotal(fileData.total);
-  }, [fetchFolders, fetchFiles, appliedQ]);
+    setBuckets(bucketData.buckets);
+  }, [fetchFolders, fetchFiles, fetchBuckets, appliedQ]);
 
   useEffect(() => {
     let active = true;
 
-    Promise.all([fetchFolders(), fetchFiles(appliedQ)])
-      .then(([folderData, fileData]) => {
+    Promise.all([
+      fetchFolders(),
+      fetchFiles(appliedQ),
+      fetchBuckets(),
+    ])
+      .then(([folderData, fileData, bucketData]) => {
         if (active) {
           setFolders(folderData.folders);
           setBreadcrumbs(folderData.breadcrumbs);
           setFiles(fileData.files);
           setTotal(fileData.total);
+          setBuckets(bucketData.buckets);
         }
       })
       .catch((cause) => {
@@ -219,7 +240,7 @@ export function FilesView({
     return () => {
       active = false;
     };
-  }, [fetchFolders, fetchFiles, appliedQ]);
+  }, [fetchFolders, fetchFiles, fetchBuckets, appliedQ]);
 
   useEffect(() => {
     const reload = () => {
@@ -235,11 +256,46 @@ export function FilesView({
 
   const fetchAllFolders = useCallback(async () => {
     const data = await apiGet<{ folders: FolderItem[] }>(
-      "/api/admin/folders?all=1&status=active",
+      `/api/admin/folders?all=1&status=active&bucketId=${encodeURIComponent(selectedBucket)}`,
     );
     setAllFolders(data.folders);
     return data.folders;
-  }, []);
+  }, [selectedBucket]);
+
+  const switchBucket = (name: string) => {
+    setSelectedBucket(name);
+    setCurrentFolderId(null);
+    clearSelection();
+    setQ("");
+    setAppliedQ("");
+    setOffset(0);
+  };
+
+  const handleCreateBucket = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = newBucketName.trim().toLowerCase();
+
+    if (!name) {
+      toast.error("Bucket name is required.");
+      return;
+    }
+
+    setCreatingBucket(true);
+
+    try {
+      await apiSend("/api/admin/buckets", "POST", { name });
+      toast.success(`Bucket "${name}" created.`);
+      setNewBucketName("");
+      setNewBucketOpen(false);
+      const bData = await fetchBuckets();
+      setBuckets(bData.buckets);
+      switchBucket(name);
+    } catch (cause) {
+      toast.error(toMessage(cause));
+    } finally {
+      setCreatingBucket(false);
+    }
+  };
 
   const clearSelection = () => {
     setSelectedIds(new Set());
@@ -606,7 +662,9 @@ export function FilesView({
         <Button
           size="sm"
           aria-label="Upload"
-          onClick={() => openUploadDialog(currentFolderId)}
+          onClick={() =>
+            openUploadDialog(currentFolderId, selectedBucket)
+          }
         >
           <IconUpload />
           <span className="hidden sm:inline">Upload</span>
@@ -617,7 +675,14 @@ export function FilesView({
     return () => {
       setActions(null);
     };
-  }, [isTrash, currentFolderId, openUploadDialog, openFolderForm, setActions]);
+  }, [
+    isTrash,
+    currentFolderId,
+    selectedBucket,
+    openUploadDialog,
+    openFolderForm,
+    setActions,
+  ]);
 
   const currentFolder = breadcrumbs[breadcrumbs.length - 1];
 
@@ -631,15 +696,21 @@ export function FilesView({
   }, [files, total, setCount]);
 
   useEffect(() => {
-    if (!isTrash && currentFolder) {
-      setCustomTitle(currentFolder.name);
+    if (!isTrash) {
+      if (currentFolder) {
+        setCustomTitle(currentFolder.name);
+      } else if (selectedBucket !== "default") {
+        setCustomTitle(selectedBucket);
+      } else {
+        setCustomTitle(null);
+      }
     } else {
       setCustomTitle(null);
     }
     return () => {
       setCustomTitle(null);
     };
-  }, [isTrash, currentFolder, setCustomTitle]);
+  }, [isTrash, currentFolder, selectedBucket, setCustomTitle]);
 
   const submitFolderForm = async (
     event: React.FormEvent,
@@ -660,6 +731,7 @@ export function FilesView({
         await apiSend("/api/admin/folders", "POST", {
           name: folderName.trim(),
           parentId: currentFolderId,
+          bucketId: selectedBucket,
         });
         toast.success("Folder created");
       } else if (folderForm.type === "rename") {
@@ -756,51 +828,86 @@ export function FilesView({
       }`}
     >
       {!isTrash && (
-        <Breadcrumb className="px-1">
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              {breadcrumbs.length === 0 ? (
-                <BreadcrumbPage>Root</BreadcrumbPage>
-              ) : (
-                <BreadcrumbLink asChild>
-                  <button
-                    type="button"
-                    onClick={() => navigateTo(null)}
-                    className="cursor-pointer"
+        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="font-medium text-muted-foreground">
+                Bucket:
+              </span>
+              <Select
+                value={selectedBucket}
+                onValueChange={switchBucket}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Bucket" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {buckets.map((b) => (
+                      <SelectItem key={b.name} value={b.name}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setNewBucketOpen(true)}
+            >
+              <IconPlus className="size-3.5" />
+              <span className="hidden sm:inline">New bucket</span>
+            </Button>
+          </div>
+
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                {breadcrumbs.length === 0 ? (
+                  <BreadcrumbPage>Root</BreadcrumbPage>
+                ) : (
+                  <BreadcrumbLink asChild>
+                    <button
+                      type="button"
+                      onClick={() => navigateTo(null)}
+                      className="cursor-pointer"
+                    >
+                      Root
+                    </button>
+                  </BreadcrumbLink>
+                )}
+              </BreadcrumbItem>
+              {breadcrumbs.map((crumb, index) => {
+                const isLast = index === breadcrumbs.length - 1;
+                return (
+                  <span
+                    key={crumb.id}
+                    className="inline-flex items-center gap-1.5"
                   >
-                    Root
-                  </button>
-                </BreadcrumbLink>
-              )}
-            </BreadcrumbItem>
-            {breadcrumbs.map((crumb, index) => {
-              const isLast = index === breadcrumbs.length - 1;
-              return (
-                <span
-                  key={crumb.id}
-                  className="inline-flex items-center gap-1.5"
-                >
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    {isLast ? (
-                      <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
-                    ) : (
-                      <BreadcrumbLink asChild>
-                        <button
-                          type="button"
-                          onClick={() => navigateTo(crumb.id)}
-                          className="cursor-pointer"
-                        >
-                          {crumb.name}
-                        </button>
-                      </BreadcrumbLink>
-                    )}
-                  </BreadcrumbItem>
-                </span>
-              );
-            })}
-          </BreadcrumbList>
-        </Breadcrumb>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      {isLast ? (
+                        <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
+                      ) : (
+                        <BreadcrumbLink asChild>
+                          <button
+                            type="button"
+                            onClick={() => navigateTo(crumb.id)}
+                            className="cursor-pointer"
+                          >
+                            {crumb.name}
+                          </button>
+                        </BreadcrumbLink>
+                      )}
+                    </BreadcrumbItem>
+                  </span>
+                );
+              })}
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
       )}
 
       <Card>
@@ -1214,24 +1321,26 @@ export function FilesView({
                 value={folderParent}
                 onValueChange={setFolderParent}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Destination" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="root">/ (Root)</SelectItem>
-                  {allFolders
-                    .filter(
-                      (folder) =>
-                        folder.id !== editingFolder?.id,
-                    )
-                    .map((folder) => (
-                      <SelectItem
-                        key={folder.id}
-                        value={folder.id}
-                      >
-                        {folder.path}
-                      </SelectItem>
-                    ))}
+                  <SelectGroup>
+                    <SelectItem value="root">/ (Root)</SelectItem>
+                    {allFolders
+                      .filter(
+                        (folder) =>
+                          folder.id !== editingFolder?.id,
+                      )
+                      .map((folder) => (
+                        <SelectItem
+                          key={folder.id}
+                          value={folder.id}
+                        >
+                          {folder.path}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             ) : (
@@ -1277,20 +1386,22 @@ export function FilesView({
               value={moveFolderId}
               onValueChange={setMoveFolderId}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Destination" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="root">/ (Root)</SelectItem>
-                {allFolders
-                  .filter(
-                    (folder) => !selectedFolderIds.has(folder.id),
-                  )
-                  .map((folder) => (
-                    <SelectItem key={folder.id} value={folder.id}>
-                      {folder.path}
-                    </SelectItem>
-                  ))}
+                <SelectGroup>
+                  <SelectItem value="root">/ (Root)</SelectItem>
+                  {allFolders
+                    .filter(
+                      (folder) => !selectedFolderIds.has(folder.id),
+                    )
+                    .map((folder) => (
+                      <SelectItem key={folder.id} value={folder.id}>
+                        {folder.path}
+                      </SelectItem>
+                    ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
             <DialogFooter>
@@ -1470,6 +1581,48 @@ export function FilesView({
           </>
         )}
       </BulkBar>
+      <Dialog
+        open={newBucketOpen}
+        onOpenChange={setNewBucketOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create bucket</DialogTitle>
+            <DialogDescription>
+              Enter an S3 bucket name (3–63 characters,
+              lowercase letters, numbers, and hyphens).
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={handleCreateBucket}
+          >
+            <Input
+              value={newBucketName}
+              onChange={(event) =>
+                setNewBucketName(event.target.value)
+              }
+              placeholder="my-new-bucket"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setNewBucketOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={creatingBucket}
+              >
+                {creatingBucket ? "Creating…" : "Create bucket"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

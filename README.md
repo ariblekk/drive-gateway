@@ -1,23 +1,25 @@
 # Drive Gateway
 
-A multi-account **Google Drive storage gateway** with an admin dashboard and an API-key REST API.
+A multi-provider **storage gateway** (Google Drive & S3 backends) with an admin dashboard and an S3-compatible REST API.
 
-Uploads are routed automatically to the connected Google account with the **most free space** (ties go to the least recently used account), or round-robin if configured.
+Uploads are routed automatically to the connected storage account with the **most free space** (ties go to the least recently used account), or round-robin if configured.
 
 ## Features
 
-- Connect multiple Google Drive accounts via OAuth 2.0.
-- Automatic account selection by remaining quota, with `quota` or `round_robin` strategies.
-- Admin dashboard: overview, accounts and quota, file manager, recycle bin, API keys, activity log.
+- Connect multiple **Google Drive** accounts via OAuth 2.0.
+- Connect external **S3 storage backends** (Cloudflare R2, MinIO, Wasabi, Backblaze B2, AWS S3) with customizable quota limits.
+- Automatic account selection across all providers based on remaining quota (`quota` or `round_robin`).
+- S3-compatible API endpoint (`/s3`) with AWS Signature V4 authentication, bucket isolation, and storage limits.
+- Admin dashboard: overview with bandwidth charts, accounts & quota, file manager with bucket selector, recycle bin, API keys & S3 credentials, activity log.
 - File manager: folders, breadcrumb navigation, search, pagination, checkbox bulk actions (files and folders), rename, move, trash, restore, and permanent delete.
-- Upload dialog with drag & drop, multiple files, per-file progress, and folder destination.
+- Upload dialog with drag & drop, multiple files, per-file progress, bucket selection, and folder destination.
 - Server-side upload limit from `MAX_UPLOAD_BYTES`; the limit is shown in the UI.
 - Public REST API: upload, list, metadata, download with `Range`, delete, and stats.
-- Recycle bin backed by Google Drive trash.
+- Recycle bin backed by Google Drive trash and virtual trash for S3 backends.
 - Sidebar storage breakdown: photos, videos, documents, free space, and used space.
 - Sonner toasts, confirmation dialogs, and responsive header actions (icon-only on mobile).
 - SQLite + Drizzle ORM, Docker support with a persistent volume.
-- Refresh tokens encrypted with AES-256-GCM; API keys stored as SHA-256 hashes.
+- Secrets and refresh tokens encrypted with AES-256-GCM; API keys stored as SHA-256 hashes.
 
 ## Stack
 
@@ -84,6 +86,8 @@ https://www.googleapis.com/auth/drive.metadata.readonly
 | `ENCRYPTION_KEY` | Yes | 32-byte base64 key for refresh-token encryption and session signing. |
 | `ACCOUNT_SELECTION_STRATEGY` | No | `quota` (default) or `round_robin`. |
 | `MAX_UPLOAD_BYTES` | No | Max upload per request. Defaults to 50 MB if unset; `.env.example` uses 500 MB. |
+| `S3_REGION` | No | S3 region string. Defaults to `us-east-1`. |
+| `S3_MAX_PUT_BYTES` | No | Maximum object size for single S3 PutObject (bytes). Defaults to 1 GB. |
 
 Generate `ENCRYPTION_KEY`:
 
@@ -132,6 +136,10 @@ docker compose logs -f gateway
 6. Create API keys at `/dashboard/api-keys`. A key is shown only once.
 
 ## API
+
+Interactive API documentation (Swagger UI) is available at:
+- **Swagger Docs:** `http://localhost:3000/docs` (or `https://your-domain/docs`)
+- **OpenAPI 3.0 JSON:** `http://localhost:3000/api/openapi.json`
 
 Authenticate with either header:
 
@@ -184,6 +192,90 @@ curl -H "Authorization: Bearer $KEY" \
 | GET | `/api/v1/stats` | Storage and file statistics. |
 
 The admin dashboard uses `/api/admin/*` with the admin session cookie. It is not accessible with API keys.
+
+## S3-Compatible API
+
+Drive Gateway provides an S3-compatible API at `/s3`. It supports standard AWS Signature V4 authentication using access key ID and secret access key.
+
+### Configuration for S3 Clients
+
+- **Endpoint:** `http://<host>:3000/s3` (or `https://your-domain/s3`)
+- **Region:** `us-east-1` (or whatever `S3_REGION` is set to)
+- **Path-style:** Required (`force_path_style = true`)
+- **Credentials:** Create at `/dashboard/api-keys` under the **S3 credentials** card.
+
+### Credential Isolation & Quota
+
+When creating S3 credentials in the dashboard, you can configure:
+- **Bucket Scope:** Restrict the credential to a single bucket (e.g. `blog`), or allow access to `All buckets (*)`. An isolated credential cannot see or access other buckets (`ListBuckets` only returns its assigned bucket; requests to other buckets return `403 AccessDenied`).
+- **Permissions:** Choose `Read & Write` or `Read Only`. Read-only credentials reject `PUT` and `DELETE` requests with `403 AccessDenied`.
+- **Storage Limit:** Set a maximum storage capacity (e.g. `10 GB` or `500 MB`). Uploads exceeding the limit are blocked with `403 QuotaExceeded`. The dashboard shows live usage against the quota (`Used / Max`).
+
+### Supported S3 Operations
+
+- `ListBuckets`
+- `HeadBucket`
+- `CreateBucket`
+- `DeleteBucket` (empty buckets only)
+- `GetBucketLocation`
+- `ListObjectsV2` (prefix, delimiter, continuation token)
+- `PutObject` (single request up to `S3_MAX_PUT_BYTES`, ETag MD5, metadata)
+- `GetObject` (streaming, Range requests)
+- `HeadObject` (metadata, ETag, Content-Type)
+- `DeleteObject` (moves file to Google Drive trash)
+
+### S3 Client Examples
+
+#### rclone
+
+Configure `~/.config/rclone/rclone.conf`:
+
+```ini
+[drive-gw]
+type = s3
+provider = Other
+endpoint = https://your-domain/s3
+access_key_id = s3_your_access_key
+secret_access_key = your_secret_key
+region = us-east-1
+force_path_style = true
+```
+
+Commands:
+
+```bash
+rclone lsd drive-gw:
+rclone copy ./my-file.zip drive-gw:default/backups/
+rclone ls drive-gw:default/backups/
+```
+
+#### AWS CLI
+
+```bash
+export AWS_ACCESS_KEY_ID="s3_your_access_key"
+export AWS_SECRET_ACCESS_KEY="your_secret_key"
+export AWS_DEFAULT_REGION="us-east-1"
+ENDPOINT="http://localhost:3000/s3"
+
+# List buckets
+aws --endpoint-url $ENDPOINT s3api list-buckets
+
+# Upload an object
+aws --endpoint-url $ENDPOINT s3api put-object \
+  --bucket default --key photos/sunset.jpg --body ./sunset.jpg
+
+# List objects with prefix
+aws --endpoint-url $ENDPOINT s3api list-objects-v2 \
+  --bucket default --prefix photos/
+
+# Download object
+aws --endpoint-url $ENDPOINT s3api get-object \
+  --bucket default --key photos/sunset.jpg ./downloaded.jpg
+
+# Delete object
+aws --endpoint-url $ENDPOINT s3api delete-object \
+  --bucket default --key photos/sunset.jpg
+```
 
 ## Notes & Limitations
 

@@ -16,9 +16,12 @@ export async function GET(request: Request) {
     const status = searchParams.get("status") ?? "active";
     const parentParam = searchParams.get("parentId") ?? "root";
     const parentId = parentParam === "root" ? null : parentParam;
+    const bucketParam = searchParams.get("bucketId");
+    const bucketId =
+      bucketParam === "all" ? null : (bucketParam ?? "default");
 
     return json({
-      folders: listFolders({ parentId, status, all }),
+      folders: listFolders({ parentId, status, all, bucketId }),
       breadcrumbs: all ? [] : getBreadcrumbs(parentId),
     });
   } catch (error) {
@@ -31,6 +34,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as {
       name?: unknown;
       parentId?: unknown;
+      bucketId?: unknown;
     } | null;
     const name = typeof body?.name === "string" ? body.name : "";
     const parentId =
@@ -48,8 +52,13 @@ export async function POST(request: Request) {
       );
     }
 
+    const bucketId =
+      typeof body?.bucketId === "string" && body.bucketId.trim()
+        ? body.bucketId.trim()
+        : "default";
+
     return json(
-      { folder: createFolder({ name, parentId }) },
+      { folder: createFolder({ name, parentId, bucketId }) },
       { status: 201 },
     );
   } catch (error) {
