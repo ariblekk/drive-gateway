@@ -1,0 +1,25 @@
+services:
+  gateway:
+    image: ariblekk/drive-gateway:latest
+    container_name: drive-gateway
+    restart: unless-stopped
+    pull_policy: always
+    ports:
+      # Bind to loopback and expose through a reverse proxy (TLS + rate
+      # limiting). Use "3000:3000" only if you intentionally want the
+      # container reachable directly from the network.
+      - "127.0.0.1:3000:3000"
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      STORAGE_DIR: /data
+      DATABASE_PATH: /data/gateway.db
+    volumes:
+      - gateway_data:/data
+
+volumes:
+  gateway_data:
+    name: drive_gateway_data

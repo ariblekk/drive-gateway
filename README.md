@@ -139,7 +139,7 @@ docker compose logs -f gateway
 
 - Port: `3000`
 - Volume: `drive_gateway_data` mounted at `/data`
-- Database migrations run automatically on container start.
+- Database migrations run automatically on container start. The container fixes `/data` ownership before migrations, then runs the app as the unprivileged `gateway` user.
 - `docker compose down` keeps the volume. Do **not** use `docker compose down -v` unless you want to delete the data.
 
 ## Usage

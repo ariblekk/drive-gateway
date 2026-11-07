@@ -20,6 +20,9 @@ COPY . .
 RUN pnpm build
 
 FROM base AS runner
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends gosu \
+  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -40,10 +43,6 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/lib/db/migrations ./lib/db/migrations
 COPY --from=builder /app/scripts/migrate.mjs ./scripts/migrate.mjs
 
-RUN chown -R gateway:gateway /app /data
-
-USER gateway
-
 EXPOSE 3000
 
-CMD ["sh", "-c", "node scripts/migrate.mjs && ./node_modules/.bin/next start"]
+CMD ["sh", "-c", "chown -R gateway:gateway /data && gosu gateway sh -c 'node scripts/migrate.mjs && exec ./node_modules/.bin/next start'"]
