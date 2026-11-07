@@ -108,8 +108,7 @@ export function LoginForm({
                   {isSubmitting ? "Signing in…" : "Sign in"}
                 </Button>
                 <FieldDescription className="text-center">
-                  Credentials come from <code>ADMIN_EMAIL</code> and{" "}
-                  <code>ADMIN_PASSWORD</code>.
+                  Use the admin credentials configured by the deployment administrator.
                 </FieldDescription>
               </Field>
             </FieldGroup>

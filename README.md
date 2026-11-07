@@ -47,7 +47,7 @@ Open:
 - `http://localhost:3000/login` — admin login
 - `http://localhost:3000/dashboard` — admin dashboard
 
-There is no signup page. Admin credentials come only from `ADMIN_EMAIL` plus either `ADMIN_PASSWORD` or a scrypt `ADMIN_PASSWORD_HASH`.
+There is no signup page. Admin credentials come only from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
 ## Google OAuth Setup
 
@@ -76,8 +76,7 @@ https://www.googleapis.com/auth/drive.metadata.readonly
 | Variable | Required | Description |
 | --- | --- | --- |
 | `ADMIN_EMAIL` | Yes | Admin login email. |
-| `ADMIN_PASSWORD` | No | Admin login password (plaintext). Use either this or `ADMIN_PASSWORD_HASH`. |
-| `ADMIN_PASSWORD_HASH` | No | Preferred scrypt hash of the admin password. Generate with `pnpm hash:password "<password>"`. |
+| `ADMIN_PASSWORD` | Yes | Admin login password. Set it directly in the deployment environment; never commit it to source control. |
 | `GOOGLE_CLIENT_ID` | Yes | OAuth client ID. |
 | `GOOGLE_CLIENT_SECRET` | Yes | OAuth client secret. |
 | `GOOGLE_REDIRECT_URI` | Yes | Must exactly match the Google Console redirect URI. |
@@ -102,13 +101,6 @@ Generate `ENCRYPTION_KEY`:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
-
-Generate an admin password hash (recommended over plaintext). The command
-outputs `$` separators escaped for direct pasting into `.env`:
-
-```bash
-pnpm hash:password "your-strong-password"
 ```
 
 Never commit `.env`, `data/`, or `*.db`; they are gitignored.
@@ -309,7 +301,7 @@ aws --endpoint-url $ENDPOINT s3api delete-object \
 - `/dashboard` and `/api/admin/*` require the admin session; `/docs` and `/api/openapi.json` are protected too.
 - `/api/v1/*` uses API keys, never the admin session. API keys are global admin bridges and are not bucket-scoped by design.
 - S3 credentials are bucket-scoped. An empty bucket is rejected; wildcard access requires an explicit opt-in.
-- Admin passwords are verified with scrypt when `ADMIN_PASSWORD_HASH` is set, otherwise with a constant-time comparison. Generate hashes with `pnpm hash:password`.
+- `ADMIN_PASSWORD` is compared in constant time; set a strong password and keep it only in the deployment environment.
 - Login, backup, restore, and invalid API-key attempts are rate limited per IP and persisted in SQLite. Successful checks clear the counter.
 - Logging out bumps a session epoch, revoking every outstanding session token (including stolen cookies).
 - Responses include `nosniff`, framing protection, a restrictive CSP, and a global `Content-Security-Policy` for the app. S3 objects are served with a sandbox CSP and safe `Content-Disposition`; only safe MIME types render inline.
@@ -347,5 +339,4 @@ pnpm lint          # ESLint
 pnpm db:migrate    # apply migrations
 pnpm db:generate   # generate a migration after schema changes
 pnpm db:studio     # Drizzle Studio
-pnpm hash:password # generate a scrypt admin password hash
 ```

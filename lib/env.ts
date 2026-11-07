@@ -3,8 +3,7 @@ import { z } from "zod";
 const envSchema = z
   .object({
     ADMIN_EMAIL: z.string().min(1, "ADMIN_EMAIL is required"),
-    ADMIN_PASSWORD: z.string().optional(),
-    ADMIN_PASSWORD_HASH: z.string().optional(),
+    ADMIN_PASSWORD: z.string().min(1).optional(),
     GOOGLE_CLIENT_ID: z.string().min(1, "GOOGLE_CLIENT_ID is required"),
     GOOGLE_CLIENT_SECRET: z.string().min(1, "GOOGLE_CLIENT_SECRET is required"),
     GOOGLE_REDIRECT_URI: z
@@ -55,11 +54,9 @@ const envSchema = z
   })
   .refine(
     (env) =>
-      Boolean(
-        env.ADMIN_PASSWORD?.trim() || env.ADMIN_PASSWORD_HASH?.trim(),
-      ),
+      Boolean(env.ADMIN_PASSWORD?.trim()),
     {
-      message: "Set either ADMIN_PASSWORD or ADMIN_PASSWORD_HASH",
+      message: "Set ADMIN_PASSWORD",
       path: ["ADMIN_PASSWORD"],
     },
   );

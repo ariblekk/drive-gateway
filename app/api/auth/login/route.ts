@@ -84,7 +84,7 @@ export async function POST(request: Request) {
         error: {
           code: "config_error",
           message:
-            "Set ADMIN_PASSWORD or ADMIN_PASSWORD_HASH before logging in",
+            "Set ADMIN_PASSWORD before logging in",
         },
       },
       { status: 500 },
