@@ -1,8 +1,13 @@
-import { handleRouteError, jsonError, preflight } from "@/lib/api/response";
+import { handleRouteError, jsonError } from "@/lib/api/response";
 import { handleUploadRequest } from "@/lib/api/upload-handler";
 import { getSession } from "@/lib/auth/session";
 
-export const OPTIONS = preflight;
+export function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: { Allow: "POST" },
+  });
+}
 
 export async function POST(request: Request) {
   try {

@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
+import { useTheme } from "next-themes";
 import {
-  IconMail,
+  IconMoon,
+  IconSun,
   IconUpload,
   type Icon,
 } from "@tabler/icons-react";
@@ -29,6 +32,12 @@ export function NavMain({
 }) {
   const pathname = usePathname();
   const { openUploadDialog } = useUploadDialog();
+  const { resolvedTheme, setTheme } = useTheme();
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   return (
     <SidebarGroup>
@@ -44,15 +53,18 @@ export function NavMain({
               <span>Upload</span>
             </SidebarMenuButton>
             <Button
+              type="button"
               size="icon"
-              className="size-8 group-data-[collapsible=icon]:hidden"
+              className="size-8 shrink-0 group-data-[collapsible=icon]:hidden"
               variant="outline"
-              asChild
+              onClick={() =>
+                setTheme(resolvedTheme === "dark" ? "light" : "dark")
+              }
+              aria-label="Toggle theme"
+              title="Toggle theme"
             >
-              <Link href="/dashboard/files">
-                <IconMail />
-                <span className="sr-only">Files</span>
-              </Link>
+              {mounted &&
+                (resolvedTheme === "dark" ? <IconSun /> : <IconMoon />)}
             </Button>
           </SidebarMenuItem>
         </SidebarMenu>

@@ -53,11 +53,16 @@ export async function apiSend<T>(
   path: string,
   method: string,
   body?: unknown,
+  headers?: Record<string, string>,
 ): Promise<T> {
   const response = await fetch(path, {
     method,
-    headers:
-      body === undefined ? undefined : { "Content-Type": "application/json" },
+    headers: {
+      ...(body === undefined
+        ? {}
+        : { "Content-Type": "application/json" }),
+      ...headers,
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 

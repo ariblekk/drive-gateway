@@ -57,6 +57,13 @@
       "when": 1793891000000,
       "tag": "0007_rename_storage_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793991177414,
+      "tag": "0008_loving_sue_storm",
+      "breakpoints": true
     }
   ]
 }

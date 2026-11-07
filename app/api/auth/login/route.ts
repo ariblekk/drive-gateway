@@ -1,23 +1,35 @@
 import { NextResponse } from "next/server";
 
+import {
+  adminPasswordConfigured,
+  constantTimeEqual,
+  verifyAdminPassword,
+} from "@/lib/auth/admin-password";
 import { setSessionCookie } from "@/lib/auth/session";
-import { getAdminCredentials } from "@/lib/env";
-
-function constantTimeEqual(input: string, expected: string): boolean {
-  if (input.length !== expected.length) {
-    return false;
-  }
-
-  let result = 0;
-
-  for (let index = 0; index < input.length; index += 1) {
-    result |= input.charCodeAt(index) ^ expected.charCodeAt(index);
-  }
-
-  return result === 0;
-}
+import {
+  checkLoginRateLimit,
+  clearLoginFailures,
+  recordLoginFailure,
+} from "@/lib/auth/rate-limit";
+import { getAdminEmail } from "@/lib/env";
 
 export async function POST(request: Request) {
+  const contentLength = Number(
+    request.headers.get("content-length") ?? 0,
+  );
+
+  if (Number.isFinite(contentLength) && contentLength > 16 * 1024) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "payload_too_large",
+          message: "Login request is too large",
+        },
+      },
+      { status: 413 },
+    );
+  }
+
   let body: unknown = null;
 
   try {
@@ -31,26 +43,60 @@ export async function POST(request: Request) {
   const password =
     typeof record.password === "string" ? record.password : "";
 
-  let credentials: { email: string; password: string };
+  const rateLimit = checkLoginRateLimit(request, email);
+
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "too_many_attempts",
+          message: `Too many failed login attempts. Try again in ${rateLimit.retryAfterSeconds} seconds.`,
+        },
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rateLimit.retryAfterSeconds),
+        },
+      },
+    );
+  }
+
+  let adminEmail: string;
 
   try {
-    credentials = getAdminCredentials();
+    adminEmail = getAdminEmail();
   } catch {
     return NextResponse.json(
       {
         error: {
           code: "config_error",
-          message: "ADMIN_EMAIL and ADMIN_PASSWORD are not configured",
+          message: "ADMIN_EMAIL is not configured",
         },
       },
       { status: 500 },
     );
   }
 
-  const emailMatches = constantTimeEqual(email, credentials.email);
-  const passwordMatches = constantTimeEqual(password, credentials.password);
+  if (!adminPasswordConfigured()) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "config_error",
+          message:
+            "Set ADMIN_PASSWORD or ADMIN_PASSWORD_HASH before logging in",
+        },
+      },
+      { status: 500 },
+    );
+  }
+
+  const emailMatches = constantTimeEqual(email, adminEmail);
+  const passwordMatches = verifyAdminPassword(password);
 
   if (!emailMatches || !passwordMatches) {
+    recordLoginFailure(request, email);
+
     return NextResponse.json(
       {
         error: {
@@ -62,7 +108,8 @@ export async function POST(request: Request) {
     );
   }
 
-  await setSessionCookie(credentials.email);
+  clearLoginFailures(request, email);
+  await setSessionCookie(adminEmail);
 
   return NextResponse.json({ ok: true });
 }

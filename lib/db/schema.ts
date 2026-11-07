@@ -158,6 +158,20 @@ export const activityLog = sqliteTable(
   (table) => [index("activity_log_created_at_idx").on(table.createdAt)],
 );
 
+export const loginAttempts = sqliteTable(
+  "login_attempts",
+  {
+    id: text("id").primaryKey(),
+    ip: text("ip").notNull(),
+    email: text("email").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("login_attempts_ip_idx").on(table.ip, table.createdAt),
+    index("login_attempts_email_idx").on(table.email, table.createdAt),
+  ],
+);
+
 export type StorageAccount = typeof storageAccounts.$inferSelect;
 export type NewStorageAccount = typeof storageAccounts.$inferInsert;
 
@@ -184,3 +198,6 @@ export type NewApiKey = typeof apiKeys.$inferInsert;
 
 export type ActivityEntry = typeof activityLog.$inferSelect;
 export type NewActivityEntry = typeof activityLog.$inferInsert;
+
+export type LoginAttempt = typeof loginAttempts.$inferSelect;
+export type NewLoginAttempt = typeof loginAttempts.$inferInsert;

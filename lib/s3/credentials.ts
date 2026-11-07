@@ -12,9 +12,14 @@ import {
 
 export type CreateS3CredentialInput = {
   name: string;
-  bucketId?: string;
+  bucketId: string;
   permission?: "read-write" | "read-only";
   maxStorageBytes?: number | null;
+  /**
+   * Wildcard access is never implicit. Callers must opt in explicitly with
+   * `bucketId: "*"` plus `allowAllBuckets: true`.
+   */
+  allowAllBuckets?: boolean;
 };
 
 export type S3CredentialWithUsage = S3Credential & {
@@ -71,6 +76,20 @@ export function createS3Credential(
     throw new Error("Credential name is required");
   }
 
+  const bucketId = input.bucketId.trim();
+
+  if (!bucketId) {
+    throw new Error(
+      "A bucket must be selected for this S3 credential",
+    );
+  }
+
+  if (bucketId === "*" && input.allowAllBuckets !== true) {
+    throw new Error(
+      "Granting access to all buckets requires allowAllBuckets=true",
+    );
+  }
+
   const id = crypto.randomUUID();
   const accessKeyId = `s3_${crypto
     .randomBytes(18)
@@ -85,7 +104,7 @@ export function createS3Credential(
     name,
     accessKeyId,
     secretCiphertext: encrypt(secretAccessKey),
-    bucketId: input.bucketId?.trim() || "*",
+    bucketId,
     permission:
       input.permission === "read-only"
         ? "read-only"

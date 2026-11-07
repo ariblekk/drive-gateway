@@ -57,6 +57,8 @@ export const config = {
     "/api/admin/((?!upload(?:/|$)).*)",
     "/api/auth/google/start",
     "/api/auth/google/callback",
+    "/api/openapi.json",
+    "/docs",
     "/login",
   ],
 };

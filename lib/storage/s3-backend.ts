@@ -17,6 +17,10 @@ import {
   googleAccounts,
   type GoogleAccount,
 } from "@/lib/db";
+import {
+  assertSafeHttpUrl,
+  assertSafeS3Endpoint,
+} from "@/lib/security/outbound-url";
 
 export function createS3BackendClient(account: GoogleAccount): {
   client: S3Client;
@@ -34,6 +38,11 @@ export function createS3BackendClient(account: GoogleAccount): {
   }
 
   const secret = decrypt(account.s3SecretCiphertext);
+
+  // Re-validate stored endpoints in case the row was created before the SSRF
+  // guard existed or was edited directly in the database.
+  assertSafeHttpUrl(account.s3Endpoint);
+
   const client = new S3Client({
     endpoint: account.s3Endpoint,
     region: account.s3Region || "us-east-1",
@@ -55,8 +64,14 @@ export async function testS3BackendConnection(config: {
   secretAccessKey: string;
   forcePathStyle?: boolean;
 }): Promise<void> {
+  const safeEndpoint = await assertSafeS3Endpoint(config.endpoint);
+  const endpoint =
+    safeEndpoint.pathname === "/" && !safeEndpoint.search
+      ? safeEndpoint.origin
+      : safeEndpoint.toString();
+
   const client = new S3Client({
-    endpoint: config.endpoint,
+    endpoint,
     region: config.region || "us-east-1",
     credentials: {
       accessKeyId: config.accessKeyId,

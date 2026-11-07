@@ -1,3 +1,5 @@
+import { getSessionEpoch } from "./session-epoch";
+
 export const SESSION_COOKIE = "dg_session";
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -91,7 +93,8 @@ export async function createSessionToken(email: string): Promise<string> {
   }
 
   const expiresAt = Date.now() + SESSION_TTL_MS;
-  const payload = `${bytesToBase64Url(encoder.encode(email))}.${expiresAt}`;
+  const epoch = getSessionEpoch();
+  const payload = `${bytesToBase64Url(encoder.encode(email))}.${expiresAt}.${epoch}`;
   const signature = await sign(payload, key);
 
   return `${payload}.${signature}`;
@@ -112,12 +115,12 @@ export async function verifySessionToken(
 
   const parts = token.split(".");
 
-  if (parts.length !== 3) {
+  if (parts.length !== 4) {
     return null;
   }
 
-  const [emailPart, expiresPart, signature] = parts;
-  const payload = `${emailPart}.${expiresPart}`;
+  const [emailPart, expiresPart, epochPart, signature] = parts;
+  const payload = `${emailPart}.${expiresPart}.${epochPart}`;
   const expected = await sign(payload, key);
 
   if (!timingSafeEqual(signature, expected)) {
@@ -127,6 +130,11 @@ export async function verifySessionToken(
   const expiresAt = Number(expiresPart);
 
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    return null;
+  }
+
+  // Logout bumps the epoch, which invalidates every token issued before it.
+  if (Number(epochPart) !== getSessionEpoch()) {
     return null;
   }
 

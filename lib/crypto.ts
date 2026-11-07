@@ -31,7 +31,7 @@ export function encrypt(plaintext: string): string {
 export function decrypt(payload: string): string {
   const [ivPart, tagPart, dataPart] = payload.split(".");
 
-  if (!ivPart || !tagPart || !dataPart) {
+  if (!ivPart || !tagPart || dataPart === undefined) {
     throw new Error("Invalid encrypted payload");
   }
 

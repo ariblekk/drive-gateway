@@ -1,6 +1,7 @@
 import { unstable_rethrow } from "next/navigation";
 
 import { errorMessage, GatewayError } from "@/lib/errors";
+import { S3Error } from "@/lib/s3/errors";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -17,9 +18,11 @@ function applyCors(headers: Headers): void {
   }
 }
 
+// CORS is applied explicitly by the public /api/v1 handlers via withCors().
+// Admin routes are cookie-authenticated and must never be readable by other
+// origins, so json() intentionally does not add Access-Control-* headers.
 export function json(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
-  applyCors(headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
 
   return new Response(JSON.stringify(data), { ...init, headers });
@@ -51,7 +54,7 @@ export function withCors(response: Response): Response {
 export function handleRouteError(error: unknown): Response {
   unstable_rethrow(error);
 
-  if (error instanceof GatewayError) {
+  if (error instanceof GatewayError || error instanceof S3Error) {
     return jsonError(error.status, error.code, error.message);
   }
 

@@ -6,6 +6,7 @@ import { encrypt } from "@/lib/crypto";
 import { getDb, googleAccounts } from "@/lib/db";
 import { GatewayError } from "@/lib/errors";
 import { publicAccount } from "@/lib/serializers";
+import { assertSafeS3Endpoint } from "@/lib/security/outbound-url";
 import { testS3BackendConnection } from "@/lib/storage/s3-backend";
 
 export async function POST(request: Request) {
@@ -65,16 +66,27 @@ export async function POST(request: Request) {
       );
     }
 
+    let safeEndpoint: URL;
+
     try {
-      new URL(endpoint);
-    } catch {
-      throw new GatewayError("bad_request", "Invalid Endpoint URL", 400);
+      safeEndpoint = await assertSafeS3Endpoint(endpoint);
+    } catch (err: unknown) {
+      throw new GatewayError(
+        "bad_request",
+        err instanceof Error ? err.message : "Invalid Endpoint URL",
+        400,
+      );
     }
+
+    const endpointValue =
+      safeEndpoint.pathname === "/" && !safeEndpoint.search
+        ? safeEndpoint.origin
+        : safeEndpoint.toString();
 
     // Test connection to external S3 backend before saving
     try {
       await testS3BackendConnection({
-        endpoint,
+        endpoint: endpointValue,
         bucket,
         region,
         accessKeyId,
@@ -104,7 +116,7 @@ export async function POST(request: Request) {
       accessToken: null,
       tokenExpiry: null,
       scope: null,
-      s3Endpoint: endpoint,
+      s3Endpoint: endpointValue,
       s3Bucket: bucket,
       s3Region: region,
       s3AccessKeyId: accessKeyId,

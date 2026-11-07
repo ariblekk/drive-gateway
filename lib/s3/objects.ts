@@ -307,19 +307,73 @@ export function parseMetadata(
   }
 }
 
+function isInlineSafe(mimeType: string): boolean {
+  const mime = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+
+  if (mime === "application/pdf" || mime === "text/plain") {
+    return true;
+  }
+
+  // SVG can embed scripts, so it is always downloaded.
+  if (mime.startsWith("image/")) {
+    return !mime.includes("svg");
+  }
+
+  return mime.startsWith("audio/") || mime.startsWith("video/");
+}
+
+function contentDisposition(filename: string, inline: boolean): string {
+  const ascii = filename
+    .replace(/[^\x20-\x7e]/g, "_")
+    .replace(/["\\]/g, "_")
+    .slice(0, 200);
+  const fallback = ascii || "download";
+  const encoded = encodeURIComponent(filename);
+
+  return `${inline ? "inline" : "attachment"}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
 export async function objectHeaders(
   file: StoredFile,
 ): Promise<Headers> {
   const etag = await ensureFileEtag(file);
+  const mimeType = file.mimeType ?? "application/octet-stream";
   const headers = new Headers({
-    "Content-Type": file.mimeType ?? "application/octet-stream",
+    "Content-Type": mimeType,
     "Content-Length": String(file.size),
     "Last-Modified": new Date(file.updatedAt).toUTCString(),
     ETag: `"${etag}"`,
     "Accept-Ranges": "bytes",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy":
+      "default-src 'none'; frame-ancestors 'none'; sandbox",
   });
 
   const metadata = parseMetadata(file.metadata);
+
+  // Never honour a stored disposition that would force active content to
+  // render inline. Only the safe MIME allow-list may use `inline`.
+  const storedDisposition = metadata.contentDisposition;
+  const wantsInline =
+    typeof storedDisposition === "string" &&
+    storedDisposition.split(";")[0]?.trim().toLowerCase() === "inline";
+  const inline = wantsInline && isInlineSafe(mimeType);
+
+  headers.set(
+    "Content-Disposition",
+    contentDisposition(file.name, inline),
+  );
+
+  const cacheControl = metadata.cacheControl;
+
+  if (
+    typeof cacheControl === "string" &&
+    !/[\r\n]/.test(cacheControl)
+  ) {
+    headers.set("Cache-Control", cacheControl.slice(0, 200));
+  }
+
   const user = metadata.user;
 
   if (user && typeof user === "object") {

@@ -254,6 +254,19 @@ export async function verifyS3Request(
       ? EMPTY_SHA256
       : "UNSIGNED-PAYLOAD");
 
+  // Accepting an unsigned body would let an attacker reuse a signature from
+  // a different payload, so uploads must commit to a content hash.
+  if (
+    (request.method === "PUT" || request.method === "POST") &&
+    payloadHash.includes("UNSIGNED-PAYLOAD")
+  ) {
+    throw new S3Error(
+      "InvalidRequest",
+      "Unsigned payloads are not accepted for uploads. Provide a valid x-amz-content-sha256 header.",
+      400,
+    );
+  }
+
   const canonicalRequest = [
     request.method,
     url.pathname || "/",

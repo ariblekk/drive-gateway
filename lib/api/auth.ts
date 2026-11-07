@@ -4,6 +4,11 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { apiKeys, getDb, type ApiKey } from "@/lib/db";
 import { GatewayError } from "@/lib/errors";
+import {
+  checkActionRateLimit,
+  clearActionFailures,
+  recordActionFailure,
+} from "@/lib/auth/rate-limit";
 
 export function hashApiKey(key: string): string {
   return createHash("sha256").update(key).digest("hex");
@@ -30,6 +35,16 @@ export async function requireApiKey(request: Request): Promise<ApiKey> {
     );
   }
 
+  const rateLimit = checkActionRateLimit(request, "api-key");
+
+  if (!rateLimit.allowed) {
+    throw new GatewayError(
+      "too_many_attempts",
+      `Too many invalid API key attempts. Try again in ${rateLimit.retryAfterSeconds} seconds.`,
+      429,
+    );
+  }
+
   const db = getDb();
   const key = db
     .select()
@@ -40,8 +55,12 @@ export async function requireApiKey(request: Request): Promise<ApiKey> {
     .get();
 
   if (!key) {
+    recordActionFailure(request, "api-key");
+
     throw new GatewayError("unauthorized", "Invalid API key", 401);
   }
+
+  clearActionFailures(request, "api-key");
 
   db.update(apiKeys)
     .set({ lastUsedAt: Date.now() })

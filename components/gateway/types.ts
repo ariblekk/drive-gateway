@@ -1,3 +1,15 @@
+export interface RestoreResult {
+  restored: {
+    storageAccounts: number;
+    typeUsage: number;
+    folders: number;
+    buckets: number;
+    s3Credentials: number;
+    files: number;
+    apiKeys: number;
+  };
+}
+
 export interface Account {
   id: string;
   provider: "google" | "s3";

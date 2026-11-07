@@ -1,9 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 
 import {
   buckets,
   files,
+  folders,
   getDb,
+  s3Credentials,
   type Bucket,
 } from "@/lib/db";
 
@@ -106,13 +108,47 @@ export function deleteBucket(name: string): void {
     );
   }
 
-  if (!bucketIsEmpty(bucket.id)) {
+  const db = getDb();
+  const activeCredential = db
+    .select({ id: s3Credentials.id })
+    .from(s3Credentials)
+    .where(
+      and(
+        eq(s3Credentials.status, "active"),
+        or(
+          eq(s3Credentials.bucketId, bucket.id),
+          eq(s3Credentials.bucketId, "*"),
+        ),
+      ),
+    )
+    .get();
+
+  if (activeCredential) {
     throw new S3Error(
-      "BucketNotEmpty",
-      "The bucket you tried to delete is not empty",
+      "InvalidRequest",
+      "Disable or remove active S3 credentials connected to this bucket before deleting it",
       409,
     );
   }
 
-  getDb().delete(buckets).where(eq(buckets.id, bucket.id)).run();
+  const bucketContent = db
+    .select({ id: files.id })
+    .from(files)
+    .where(eq(files.bucketId, bucket.id))
+    .get();
+  const bucketFolders = db
+    .select({ id: folders.id })
+    .from(folders)
+    .where(eq(folders.bucketId, bucket.id))
+    .get();
+
+  if (bucketContent || bucketFolders) {
+    throw new S3Error(
+      "BucketNotEmpty",
+      "Empty the bucket, including its trash and folders, before deleting it",
+      409,
+    );
+  }
+
+  db.delete(buckets).where(eq(buckets.id, bucket.id)).run();
 }

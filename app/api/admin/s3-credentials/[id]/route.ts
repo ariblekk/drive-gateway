@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { handleRouteError, json } from "@/lib/api/response";
 import { GatewayError } from "@/lib/errors";
 import { revokeS3Credential } from "@/lib/s3/credentials";
+import { publicS3Credential } from "@/lib/serializers";
 
 export async function DELETE(
   _request: Request,
@@ -21,7 +22,7 @@ export async function DELETE(
       );
     }
 
-    return json({ credential });
+    return json({ credential: publicS3Credential(credential) });
   } catch (error) {
     return handleRouteError(error);
   }

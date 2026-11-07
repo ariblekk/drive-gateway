@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ffd0716d-89d1-4994-b850-f9d925e90f7c",
-  "prevId": "7f96768b-31cf-4587-9296-e461d228b3a6",
+  "id": "3f9c2b1e-7d4a-4e2b-9c11-8a5d6f0e7b21",
+  "prevId": "ffd0716d-89d1-4994-b850-f9d925e90f7c",
   "tables": {
     "activity_log": {
       "name": "activity_log",
@@ -361,8 +361,8 @@
         }
       },
       "foreignKeys": {
-        "files_account_id_google_accounts_id_fk": {
-          "name": "files_account_id_google_accounts_id_fk",
+        "files_account_id_storage_accounts_id_fk": {
+          "name": "files_account_id_storage_accounts_id_fk",
           "tableFrom": "files",
           "tableTo": "storage_accounts",
           "columnsFrom": [
@@ -666,8 +666,8 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "type_usage_account_id_google_accounts_id_fk": {
-          "name": "type_usage_account_id_google_accounts_id_fk",
+        "type_usage_account_id_storage_accounts_id_fk": {
+          "name": "type_usage_account_id_storage_accounts_id_fk",
           "tableFrom": "type_usage",
           "tableTo": "storage_accounts",
           "columnsFrom": [
@@ -864,6 +864,13 @@
         }
       },
       "indexes": {
+        "storage_accounts_email_unique": {
+          "name": "storage_accounts_email_unique",
+          "columns": [
+            "email"
+          ],
+          "isUnique": true
+        },
         "storage_accounts_status_idx": {
           "name": "storage_accounts_status_idx",
           "columns": [

@@ -47,7 +47,7 @@ Open:
 - `http://localhost:3000/login` — admin login
 - `http://localhost:3000/dashboard` — admin dashboard
 
-There is no signup page. Admin credentials come only from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+There is no signup page. Admin credentials come only from `ADMIN_EMAIL` plus either `ADMIN_PASSWORD` or a scrypt `ADMIN_PASSWORD_HASH`.
 
 ## Google OAuth Setup
 
@@ -76,11 +76,13 @@ https://www.googleapis.com/auth/drive.metadata.readonly
 | Variable | Required | Description |
 | --- | --- | --- |
 | `ADMIN_EMAIL` | Yes | Admin login email. |
-| `ADMIN_PASSWORD` | Yes | Admin login password. Change before deploying. |
+| `ADMIN_PASSWORD` | No | Admin login password (plaintext). Use either this or `ADMIN_PASSWORD_HASH`. |
+| `ADMIN_PASSWORD_HASH` | No | Preferred scrypt hash of the admin password. Generate with `pnpm hash:password "<password>"`. |
 | `GOOGLE_CLIENT_ID` | Yes | OAuth client ID. |
 | `GOOGLE_CLIENT_SECRET` | Yes | OAuth client secret. |
 | `GOOGLE_REDIRECT_URI` | Yes | Must exactly match the Google Console redirect URI. |
 | `APP_URL` | No | Public app URL. Defaults to `http://localhost:3000`. |
+| `COOKIE_SECURE` | No | `1` forces the `Secure` session cookie, `0` disables it, unset derives it from `APP_URL`. |
 | `STORAGE_DIR` | No | Data directory. Defaults to `./data`; Docker uses `/data`. |
 | `DATABASE_PATH` | No | SQLite path. Defaults to `$STORAGE_DIR/gateway.db`. |
 | `ENCRYPTION_KEY` | Yes | 32-byte base64 key for refresh-token encryption and session signing. |
@@ -88,11 +90,25 @@ https://www.googleapis.com/auth/drive.metadata.readonly
 | `MAX_UPLOAD_BYTES` | No | Max upload per request. Defaults to 50 MB if unset; `.env.example` uses 500 MB. |
 | `S3_REGION` | No | S3 region string. Defaults to `us-east-1`. |
 | `S3_MAX_PUT_BYTES` | No | Maximum object size for single S3 PutObject (bytes). Defaults to 1 GB. |
+| `TRUST_PROXY` | No | `1` to trust `X-Forwarded-For` / `X-Real-IP` for login rate limiting. Enable only behind a reverse proxy that overwrites those headers. Defaults to `0`. |
+| `LOGIN_MAX_PER_IP` | No | Failed logins allowed per IP per window. Defaults to `5`. |
+| `LOGIN_MAX_PER_EMAIL` | No | Failed logins allowed per email per window. Defaults to `20`. |
+| `LOGIN_WINDOW_MINUTES` | No | Login, backup, restore, and API-key rate-limit window in minutes. Defaults to `1`. |
+| `ADMIN_PASSWORD_MAX_ATTEMPTS` | No | Failed admin-password checks (backup/restore) per IP per window. Defaults to `5`. |
+| `API_KEY_MAX_FAILURES` | No | Invalid API-key attempts per IP per window. Defaults to `30`. |
+| `S3_ALLOW_PRIVATE_ENDPOINTS` | No | `1` allows S3 backend endpoints on private networks (e.g. MinIO on a LAN). Link-local and metadata addresses stay blocked. Defaults to `0`. |
 
 Generate `ENCRYPTION_KEY`:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Generate an admin password hash (recommended over plaintext). The command
+outputs `$` separators escaped for direct pasting into `.env`:
+
+```bash
+pnpm hash:password "your-strong-password"
 ```
 
 Never commit `.env`, `data/`, or `*.db`; they are gitignored.
@@ -290,12 +306,20 @@ aws --endpoint-url $ENDPOINT s3api delete-object \
 
 ## Security
 
-- `/dashboard` and `/api/admin/*` require the admin session.
-- `/api/v1/*` uses API keys, never the admin session.
-- Refresh tokens are encrypted with AES-256-GCM; API keys are hashed with SHA-256.
+- `/dashboard` and `/api/admin/*` require the admin session; `/docs` and `/api/openapi.json` are protected too.
+- `/api/v1/*` uses API keys, never the admin session. API keys are global admin bridges and are not bucket-scoped by design.
+- S3 credentials are bucket-scoped. An empty bucket is rejected; wildcard access requires an explicit opt-in.
+- Admin passwords are verified with scrypt when `ADMIN_PASSWORD_HASH` is set, otherwise with a constant-time comparison. Generate hashes with `pnpm hash:password`.
+- Login, backup, restore, and invalid API-key attempts are rate limited per IP and persisted in SQLite. Successful checks clear the counter.
+- Logging out bumps a session epoch, revoking every outstanding session token (including stolen cookies).
+- Responses include `nosniff`, framing protection, a restrictive CSP, and a global `Content-Security-Policy` for the app. S3 objects are served with a sandbox CSP and safe `Content-Disposition`; only safe MIME types render inline.
+- CORS headers are applied only to the public `/api/v1/*` endpoints, never to cookie-authenticated admin routes.
+- S3 backend endpoints are checked against SSRF: loopback, link-local, metadata hosts, and private ranges are blocked unless `S3_ALLOW_PRIVATE_ENDPOINTS=1`.
+- S3 uploads must sign a payload hash; `UNSIGNED-PAYLOAD` is rejected for write operations.
+- Refresh tokens and S3 secrets are encrypted with AES-256-GCM; API keys are stored as SHA-256 hashes.
 - `MAX_UPLOAD_BYTES` is enforced on the server before the body is processed.
 - Changing `ENCRYPTION_KEY` invalidates existing sessions and stored refresh tokens.
-- Use HTTPS in production and change the default admin password.
+- Use HTTPS in production and bind the container to loopback behind a TLS reverse proxy.
 
 ## Project Structure
 
@@ -323,4 +347,5 @@ pnpm lint          # ESLint
 pnpm db:migrate    # apply migrations
 pnpm db:generate   # generate a migration after schema changes
 pnpm db:studio     # Drizzle Studio
+pnpm hash:password # generate a scrypt admin password hash
 ```

@@ -57,7 +57,7 @@ export function S3CredentialsCard() {
   );
   const [buckets, setBuckets] = useState<BucketItem[]>([]);
   const [name, setName] = useState("");
-  const [bucketId, setBucketId] = useState("*");
+  const [bucketId, setBucketId] = useState("");
   const [permission, setPermission] = useState<"read-write" | "read-only">(
     "read-write",
   );
@@ -77,9 +77,7 @@ export function S3CredentialsCard() {
       .then((data) => {
         if (active) {
           setCredentials(
-            [...data.credentials].sort(
-              (a, b) => b.createdAt - a.createdAt,
-            ),
+            [...data.credentials].sort((a, b) => b.createdAt - a.createdAt),
           );
         }
       })
@@ -115,9 +113,7 @@ export function S3CredentialsCard() {
       credentials: S3CredentialItem[];
     }>("/api/admin/s3-credentials");
     setCredentials(
-      [...data.credentials].sort(
-        (a, b) => b.createdAt - a.createdAt,
-      ),
+      [...data.credentials].sort((a, b) => b.createdAt - a.createdAt),
     );
   };
 
@@ -126,6 +122,11 @@ export function S3CredentialsCard() {
 
     if (!name.trim()) {
       toast.error("Give the credential a name first.");
+      return;
+    }
+
+    if (!bucketId) {
+      toast.error("Select the bucket this credential may access.");
       return;
     }
 
@@ -147,6 +148,7 @@ export function S3CredentialsCard() {
         {
           name: name.trim(),
           bucketId,
+          allowAllBuckets: bucketId === "*",
           permission,
           maxStorageBytes,
         },
@@ -242,7 +244,7 @@ export function S3CredentialsCard() {
               <label className="text-xs font-medium">Scope / Bucket</label>
               <Select value={bucketId} onValueChange={setBucketId}>
                 <SelectTrigger className="h-8 w-full text-xs">
-                  <SelectValue />
+                  <SelectValue placeholder="Select a bucket" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -255,6 +257,11 @@ export function S3CredentialsCard() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
+              {bucketId === "*" && (
+                <p className="text-[11px] text-muted-foreground">
+                  Grants this key access to every bucket in the gateway.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -303,7 +310,7 @@ export function S3CredentialsCard() {
                     </SelectGroup>
                   </SelectContent>
                 </Select>
-                <Button type="submit" disabled={creating} size="sm">
+                <Button type="submit" disabled={creating}>
                   <IconPlus />
                   {creating ? "Creating…" : "Create S3 credential"}
                 </Button>

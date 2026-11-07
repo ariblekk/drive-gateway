@@ -69,12 +69,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import {
-  apiGet,
-  apiSend,
-  notifyStorageChanged,
-  toMessage,
-} from "./client";
+import { apiGet, apiSend, notifyStorageChanged, toMessage } from "./client";
 import {
   formatBytes,
   formatDate,
@@ -116,7 +111,8 @@ export function AccountsView() {
   const [s3QuotaValue, setS3QuotaValue] = useState("");
   const [s3QuotaUnit, setS3QuotaUnit] = useState<"GB" | "TB">("GB");
   const [s3ForcePathStyle, setS3ForcePathStyle] = useState(true);
-  const [accountToDisconnect, setAccountToDisconnect] = useState<Account | null>(null);
+  const [accountToDisconnect, setAccountToDisconnect] =
+    useState<Account | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
   const fetchAccounts = useCallback(
@@ -194,10 +190,7 @@ export function AccountsView() {
     setError(null);
 
     try {
-      await apiSend(
-        `/api/admin/accounts/${accountToDisconnect.id}`,
-        "DELETE",
-      );
+      await apiSend(`/api/admin/accounts/${accountToDisconnect.id}`, "DELETE");
       await load();
       notifyStorageChanged();
       toast.success(
@@ -287,7 +280,6 @@ export function AccountsView() {
       <ButtonGroup>
         <Button
           variant="outline"
-          size="sm"
           aria-label="Sync quotas"
           onClick={() => void syncAll()}
           disabled={busy === "all"}
@@ -297,7 +289,7 @@ export function AccountsView() {
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" aria-label="Connect account">
+            <Button aria-label="Connect account">
               <IconPlus />
               <span className="hidden sm:inline">Connect account</span>
             </Button>
@@ -457,6 +449,14 @@ export function AccountsView() {
                                 <IconRefresh />
                                 Refresh quota
                               </DropdownMenuItem>
+                              {account.provider === "google" && (
+                                <DropdownMenuItem asChild>
+                                  <a href="/api/auth/google/start">
+                                    <IconBrandGoogle />
+                                    Reconnect Google Drive
+                                  </a>
+                                </DropdownMenuItem>
+                              )}
                               {account.status !== "disconnected" && (
                                 <DropdownMenuItem
                                   onSelect={() => void toggleStatus(account)}
@@ -505,8 +505,8 @@ export function AccountsView() {
           <DialogHeader>
             <DialogTitle>Connect S3 Storage</DialogTitle>
             <DialogDescription>
-              Add an S3-compatible backend (Cloudflare R2, MinIO, Wasabi, AWS S3).
-              The gateway will test the connection before saving.
+              Add an S3-compatible backend (Cloudflare R2, MinIO, Wasabi, AWS
+              S3). The gateway will test the connection before saving.
             </DialogDescription>
           </DialogHeader>
           <form className="flex flex-col gap-3" onSubmit={handleConnectS3}>
@@ -524,7 +524,10 @@ export function AccountsView() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="s3-backend-endpoint" className="text-xs font-medium">
+              <label
+                htmlFor="s3-backend-endpoint"
+                className="text-xs font-medium"
+              >
                 Endpoint URL
               </label>
               <Input
@@ -538,7 +541,10 @@ export function AccountsView() {
 
             <div className="grid grid-cols-2 gap-2">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="s3-backend-bucket" className="text-xs font-medium">
+                <label
+                  htmlFor="s3-backend-bucket"
+                  className="text-xs font-medium"
+                >
                   Bucket name
                 </label>
                 <Input
@@ -551,7 +557,10 @@ export function AccountsView() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="s3-backend-region" className="text-xs font-medium">
+                <label
+                  htmlFor="s3-backend-region"
+                  className="text-xs font-medium"
+                >
                   Region
                 </label>
                 <Input
@@ -564,7 +573,10 @@ export function AccountsView() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="s3-backend-access-key" className="text-xs font-medium">
+              <label
+                htmlFor="s3-backend-access-key"
+                className="text-xs font-medium"
+              >
                 Access Key ID
               </label>
               <Input
@@ -577,7 +589,10 @@ export function AccountsView() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="s3-backend-secret-key" className="text-xs font-medium">
+              <label
+                htmlFor="s3-backend-secret-key"
+                className="text-xs font-medium"
+              >
                 Secret Access Key
               </label>
               <Input
@@ -606,9 +621,7 @@ export function AccountsView() {
                 />
                 <Select
                   value={s3QuotaUnit}
-                  onValueChange={(val) =>
-                    setS3QuotaUnit(val as "GB" | "TB")
-                  }
+                  onValueChange={(val) => setS3QuotaUnit(val as "GB" | "TB")}
                 >
                   <SelectTrigger className="w-18">
                     <SelectValue />
@@ -665,10 +678,14 @@ export function AccountsView() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Disconnect {accountToDisconnect?.displayName ?? accountToDisconnect?.email}?
+              Disconnect{" "}
+              {accountToDisconnect?.displayName ?? accountToDisconnect?.email}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Stored files will remain on the remote storage, but this account will no longer be used by the gateway. If there are still active files or files in the Recycle Bin on this account, the gateway will prevent disconnection.
+              Stored files will remain on the remote storage, but this account
+              will no longer be used by the gateway. If there are still active
+              files or files in the Recycle Bin on this account, the gateway
+              will prevent disconnection.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
