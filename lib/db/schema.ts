@@ -80,6 +80,9 @@ export const folders = sqliteTable(
 export const buckets = sqliteTable("buckets", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
+  storageAccountId: text("storage_account_id").references(
+    () => storageAccounts.id,
+  ),
   createdAt: integer("created_at").notNull(),
 });
 

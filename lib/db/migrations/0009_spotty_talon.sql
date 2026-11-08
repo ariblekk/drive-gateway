@@ -1,0 +1,1 @@
+ALTER TABLE `buckets` ADD `storage_account_id` text REFERENCES storage_accounts(id);

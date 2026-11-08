@@ -70,14 +70,12 @@ export function ChartBarInteractive({
   }, [traffic, timeRange]);
 
   const totalUpload = React.useMemo(
-    () =>
-      filteredData.reduce((sum, item) => sum + item.upload, 0),
+    () => filteredData.reduce((sum, item) => sum + item.upload, 0),
     [filteredData],
   );
 
   const totalDownload = React.useMemo(
-    () =>
-      filteredData.reduce((sum, item) => sum + item.download, 0),
+    () => filteredData.reduce((sum, item) => sum + item.download, 0),
     [filteredData],
   );
 
@@ -87,12 +85,12 @@ export function ChartBarInteractive({
         <div className="grid flex-1 gap-1">
           <CardTitle>Bandwidth Traffic</CardTitle>
           <CardDescription>
-            {`↑ ${formatBytes(totalUpload)} uploaded · ↓ ${formatBytes(totalDownload)} downloaded`}
+            {`↑ ${formatBytes(totalUpload)} · ↓ ${formatBytes(totalDownload)}`}
           </CardDescription>
         </div>
         <Select value={timeRange} onValueChange={setTimeRange}>
           <SelectTrigger
-            className="w-[150px] text-xs sm:ml-auto"
+            className="text-xs sm:ml-auto"
             aria-label="Select a time range"
           >
             <SelectValue />

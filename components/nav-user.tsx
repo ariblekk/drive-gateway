@@ -8,6 +8,7 @@ import {
   IconDotsVertical,
   IconKey,
   IconLogout,
+  IconSettings,
 } from "@tabler/icons-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -57,7 +58,7 @@ export function NavUser({
             >
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage
-                  src={`https://api.dicebear.com/10.x/open-peeps/svg?seed=${user.email}`}
+                  src={`https://api.dicebear.com/10.x/bottts-neutral/svg?seed=${user.email}`}
                   alt={user.name}
                 />
                 <AvatarFallback className="rounded-lg">DG</AvatarFallback>
@@ -81,7 +82,7 @@ export function NavUser({
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage
-                    src={`https://api.dicebear.com/10.x/open-peeps/svg?seed=${user.email}`}
+                    src={`https://api.dicebear.com/10.x/bottts-neutral/svg?seed=${user.email}`}
                     alt={user.name}
                   />
                   <AvatarFallback className="rounded-lg">DG</AvatarFallback>
@@ -96,6 +97,12 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/settings">
+                  <IconSettings />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/dashboard/api-keys">
                   <IconKey />

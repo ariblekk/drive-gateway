@@ -40,6 +40,7 @@ export function ensureDefaultBucket(): Bucket {
   const bucket: Bucket = {
     id: DEFAULT_BUCKET,
     name: DEFAULT_BUCKET,
+    storageAccountId: null,
     createdAt: Date.now(),
   };
 
@@ -48,7 +49,10 @@ export function ensureDefaultBucket(): Bucket {
   return bucket;
 }
 
-export function createBucket(name: string): Bucket {
+export function createBucket(
+  name: string,
+  storageAccountId?: string | null,
+): Bucket {
   if (!isValidBucketName(name)) {
     throw new S3Error(
       "InvalidBucketName",
@@ -66,6 +70,7 @@ export function createBucket(name: string): Bucket {
   const bucket: Bucket = {
     id: name,
     name,
+    storageAccountId: storageAccountId ?? null,
     createdAt: Date.now(),
   };
 

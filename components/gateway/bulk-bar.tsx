@@ -35,7 +35,6 @@ export function BulkBar({
           <ButtonGroup>{children}</ButtonGroup>
           <Button
             variant="ghost"
-            size="sm"
             onClick={onClear}
             disabled={busy}
             aria-label="Clear selection"

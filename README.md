@@ -73,29 +73,11 @@ https://www.googleapis.com/auth/drive.metadata.readonly
 
 ## Environment
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `ADMIN_EMAIL` | Yes | Admin login email. |
-| `ADMIN_PASSWORD` | Yes | Admin login password. Set it directly in the deployment environment; never commit it to source control. |
-| `GOOGLE_CLIENT_ID` | Yes | OAuth client ID. |
-| `GOOGLE_CLIENT_SECRET` | Yes | OAuth client secret. |
-| `GOOGLE_REDIRECT_URI` | Yes | Must exactly match the Google Console redirect URI. |
-| `APP_URL` | No | Public app URL. Defaults to `http://localhost:3000`. |
-| `COOKIE_SECURE` | No | `1` forces the `Secure` session cookie, `0` disables it, unset derives it from `APP_URL`. |
-| `STORAGE_DIR` | No | Data directory. Defaults to `./data`; Docker uses `/data`. |
-| `DATABASE_PATH` | No | SQLite path. Defaults to `$STORAGE_DIR/gateway.db`. |
-| `ENCRYPTION_KEY` | Yes | 32-byte base64 key for refresh-token encryption and session signing. |
-| `ACCOUNT_SELECTION_STRATEGY` | No | `quota` (default) or `round_robin`. |
-| `MAX_UPLOAD_BYTES` | No | Max upload per request. Defaults to 50 MB if unset; `.env.example` uses 500 MB. |
-| `S3_REGION` | No | S3 region string. Defaults to `us-east-1`. |
-| `S3_MAX_PUT_BYTES` | No | Maximum object size for single S3 PutObject (bytes). Defaults to 1 GB. |
-| `TRUST_PROXY` | No | `1` to trust `X-Forwarded-For` / `X-Real-IP` for login rate limiting. Enable only behind a reverse proxy that overwrites those headers. Defaults to `0`. |
-| `LOGIN_MAX_PER_IP` | No | Failed logins allowed per IP per window. Defaults to `5`. |
-| `LOGIN_MAX_PER_EMAIL` | No | Failed logins allowed per email per window. Defaults to `20`. |
-| `LOGIN_WINDOW_MINUTES` | No | Login, backup, restore, and API-key rate-limit window in minutes. Defaults to `1`. |
-| `ADMIN_PASSWORD_MAX_ATTEMPTS` | No | Failed admin-password checks (backup/restore) per IP per window. Defaults to `5`. |
-| `API_KEY_MAX_FAILURES` | No | Invalid API-key attempts per IP per window. Defaults to `30`. |
-| `S3_ALLOW_PRIVATE_ENDPOINTS` | No | `1` allows S3 backend endpoints on private networks (e.g. MinIO on a LAN). Link-local and metadata addresses stay blocked. Defaults to `0`. |
+Configuration variables are documented in [`.env.example`](./.env.example). Copy it to `.env` and adjust the values:
+
+```bash
+cp .env.example .env
+```
 
 Generate `ENCRYPTION_KEY`:
 
@@ -145,11 +127,11 @@ docker compose logs -f gateway
 
 ## API
 
-Interactive API documentation (Swagger UI) is available at:
+Interactive API documentation (Swagger UI) and OpenAPI 3.0 specifications are available at:
 - **Swagger Docs:** `http://localhost:3000/docs` (or `https://your-domain/docs`)
 - **OpenAPI 3.0 JSON:** `http://localhost:3000/api/openapi.json`
 
-Authenticate with either header:
+Authenticate requests using either header:
 
 ```http
 Authorization: Bearer <api-key>
@@ -158,46 +140,6 @@ Authorization: Bearer <api-key>
 ```http
 x-api-key: <api-key>
 ```
-
-Example:
-
-```bash
-KEY="gwk_live_xxx"
-BASE="http://localhost:3000"
-
-# Upload (multipart)
-curl -X POST "$BASE/api/v1/upload" \
-  -H "Authorization: Bearer $KEY" \
-  -F "file=@./photo.jpg" \
-  -F "path=/photos"
-
-# List files
-curl -H "Authorization: Bearer $KEY" \
-  "$BASE/api/v1/files?q=photo&limit=20&offset=0"
-
-# Download
-curl -OJ -H "Authorization: Bearer $KEY" \
-  "$BASE/api/v1/files/<file-id>/download"
-
-# Delete (moves to Google Drive trash)
-curl -X DELETE -H "Authorization: Bearer $KEY" \
-  "$BASE/api/v1/files/<file-id>"
-
-# Stats
-curl -H "Authorization: Bearer $KEY" \
-  "$BASE/api/v1/stats"
-```
-
-### Public Endpoints
-
-| Method | Path | Description |
-| --- | --- | --- |
-| POST | `/api/v1/upload` | Multipart (`file`, `folderId`, `path`, `name`) or raw body with `x-file-name`, `x-file-type`, `x-file-path`, `x-folder-id`. |
-| GET | `/api/v1/files` | List files (`q`, `folderId`, `limit`, `offset`). |
-| GET | `/api/v1/files/:id` | File metadata. |
-| GET | `/api/v1/files/:id/download` | Stream file; supports `Range`. |
-| DELETE | `/api/v1/files/:id` | Move to Google Drive trash. |
-| GET | `/api/v1/stats` | Storage and file statistics. |
 
 The admin dashboard uses `/api/admin/*` with the admin session cookie. It is not accessible with API keys.
 

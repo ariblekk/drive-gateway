@@ -64,6 +64,13 @@
       "when": 1793991177414,
       "tag": "0008_loving_sue_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794151883553,
+      "tag": "0009_spotty_talon",
+      "breakpoints": true
     }
   ]
 }

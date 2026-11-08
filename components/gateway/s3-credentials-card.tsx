@@ -212,7 +212,7 @@ export function S3CredentialsCard() {
         <div className="flex flex-col gap-1 border border-border bg-muted/30 px-3 py-2 text-xs">
           <div>
             <span className="text-muted-foreground">Endpoint: </span>
-            <code>http://&lt;host&gt;/s3</code>
+            <code>{process.env.NEXT_PUBLIC_GATEWAY_URL}/s3</code>
           </div>
           <div>
             <span className="text-muted-foreground">Region: </span>

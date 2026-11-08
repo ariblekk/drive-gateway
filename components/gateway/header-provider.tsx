@@ -14,6 +14,7 @@ const ROUTE_TITLES: Record<string, string> = {
   "/dashboard/trash": "Recycle Bin",
   "/dashboard/accounts": "Accounts & Quota",
   "/dashboard/activity": "Activity Log",
+  "/dashboard/settings": "Settings",
   "/dashboard/api-keys": "API Keys",
   "/docs": "API Documentation",
 };

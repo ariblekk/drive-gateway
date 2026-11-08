@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   IconArrowsMove,
+  IconBrandGoogle,
   IconChevronLeft,
   IconChevronRight,
+  IconDatabase,
   IconDotsVertical,
   IconDownload,
   IconFolder,
@@ -88,6 +90,7 @@ import { formatBytes, formatDate } from "./format";
 import { useHeader } from "./header-provider";
 import { useUploadDialog } from "./upload-provider";
 import type {
+  Account,
   Breadcrumb as BreadcrumbData,
   BucketItem,
   FileItem,
@@ -160,6 +163,10 @@ export function FilesView({
   const [newBucketOpen, setNewBucketOpen] = useState(false);
   const [newBucketName, setNewBucketName] = useState("");
   const [creatingBucket, setCreatingBucket] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [useSpecificStorage, setUseSpecificStorage] = useState(false);
+  const [selectedStorageAccountId, setSelectedStorageAccountId] =
+    useState<string>("");
   const [deletingBucket, setDeletingBucket] = useState(false);
   const [deleteBucketOpen, setDeleteBucketOpen] = useState(false);
   const [purgeSelectedOpen, setPurgeSelectedOpen] = useState(false);
@@ -317,9 +324,14 @@ export function FilesView({
     setCreatingBucket(true);
 
     try {
-      await apiSend("/api/admin/buckets", "POST", { name });
+      const storageAccountId =
+        useSpecificStorage && selectedStorageAccountId
+          ? selectedStorageAccountId
+          : null;
+      await apiSend("/api/admin/buckets", "POST", { name, storageAccountId });
       toast.success(`Bucket "${name}" created.`);
       setNewBucketName("");
+      setUseSpecificStorage(false);
       setNewBucketOpen(false);
       const bData = await fetchBuckets();
       setBuckets(bData.buckets);
@@ -330,6 +342,22 @@ export function FilesView({
       setCreatingBucket(false);
     }
   };
+
+  useEffect(() => {
+    if (newBucketOpen && accounts.length === 0) {
+      apiGet<{ accounts: Account[] }>("/api/admin/accounts")
+        .then((res) => {
+          const activeAccounts = res.accounts.filter(
+            (a) => a.status === "active",
+          );
+          setAccounts(activeAccounts);
+          if (activeAccounts.length > 0) {
+            setSelectedStorageAccountId(activeAccounts[0].id);
+          }
+        })
+        .catch(() => undefined);
+    }
+  }, [newBucketOpen, accounts.length]);
 
   const clearSelection = () => {
     setSelectedIds(new Set());
@@ -1525,10 +1553,7 @@ export function FilesView({
           </>
         )}
       </BulkBar>
-      <AlertDialog
-        open={purgeSelectedOpen}
-        onOpenChange={setPurgeSelectedOpen}
-      >
+      <AlertDialog open={purgeSelectedOpen} onOpenChange={setPurgeSelectedOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -1595,18 +1620,84 @@ export function FilesView({
               numbers, and hyphens).
             </DialogDescription>
           </DialogHeader>
-          <form className="flex flex-col gap-3" onSubmit={handleCreateBucket}>
-            <Input
-              value={newBucketName}
-              onChange={(event) => setNewBucketName(event.target.value)}
-              placeholder="my-new-bucket"
-              autoFocus
-            />
+          <form className="flex flex-col gap-4" onSubmit={handleCreateBucket}>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="new-bucket-name" className="text-xs font-medium">
+                Bucket name
+              </label>
+              <Input
+                id="new-bucket-name"
+                value={newBucketName}
+                onChange={(event) => setNewBucketName(event.target.value)}
+                placeholder="my-new-bucket"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex flex-col gap-2.5 border border-border p-3">
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-medium">
+                <Checkbox
+                  checked={useSpecificStorage}
+                  onCheckedChange={(checked) =>
+                    setUseSpecificStorage(Boolean(checked))
+                  }
+                />
+                <span>Use specific storage account</span>
+              </label>
+              {useSpecificStorage && (
+                <div className="flex flex-col gap-1.5 pt-1">
+                  {accounts.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No active storage accounts available.
+                    </p>
+                  ) : (
+                    <Select
+                      value={selectedStorageAccountId}
+                      onValueChange={setSelectedStorageAccountId}
+                    >
+                      <SelectTrigger className="w-full text-xs">
+                        <SelectValue placeholder="Select storage account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {accounts.map((acc) => (
+                            <SelectItem key={acc.id} value={acc.id}>
+                              <div className="flex items-center gap-2">
+                                {acc.provider === "s3" ? (
+                                  <IconDatabase className="size-3.5 text-blue-500" />
+                                ) : (
+                                  <IconBrandGoogle className="size-3.5 text-amber-500" />
+                                )}
+                                <span className="truncate">{acc.email}</span>
+                                <Badge
+                                  variant="outline"
+                                  className="h-4 px-1 py-0 text-[9px] uppercase"
+                                >
+                                  {acc.provider === "s3" ? "S3" : "Drive"}
+                                </Badge>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">
+                    Uploads to this bucket will route exclusively to the
+                    selected account.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setNewBucketOpen(false)}
+                onClick={() => {
+                  setNewBucketOpen(false);
+                  setUseSpecificStorage(false);
+                }}
               >
                 Cancel
               </Button>

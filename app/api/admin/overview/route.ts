@@ -5,7 +5,7 @@ import {
   handleRouteError,
   json,
 } from "@/lib/api/response";
-import { activityLog, getDb } from "@/lib/db";
+import { activityLog, getDb, googleAccounts } from "@/lib/db";
 import { getGlobalStats } from "@/lib/files/service";
 import { publicActivity } from "@/lib/serializers";
 
@@ -13,13 +13,21 @@ export async function GET() {
   try {
     await connection();
     const db = getDb();
+    const accounts = db.select().from(googleAccounts).all();
+    const accountMap = new Map(accounts.map((account) => [account.id, account]));
+
     const recentActivity = db
       .select()
       .from(activityLog)
       .orderBy(desc(activityLog.createdAt))
       .limit(10)
       .all()
-      .map(publicActivity);
+      .map((entry) => ({
+        ...publicActivity(entry),
+        accountEmail: entry.accountId
+          ? (accountMap.get(entry.accountId)?.email ?? null)
+          : null,
+      }));
 
     const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
 

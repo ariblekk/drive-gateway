@@ -11,10 +11,10 @@ import { and, desc, eq, isNull, like, sql } from "drizzle-orm";
 
 import { recordActivity } from "@/lib/activity";
 import {
+  buckets,
   files,
   getDb,
   googleAccounts,
-  typeUsage,
   type GoogleAccount,
   type StoredFile,
 } from "@/lib/db";
@@ -37,11 +37,7 @@ import {
 } from "@/lib/google/drive";
 import { syncAccountQuota } from "@/lib/google/quota";
 import { rankAccounts } from "@/lib/google/selection";
-import {
-  adjustTypeUsage,
-  syncAccountTypeUsage,
-  TYPE_USAGE_STALE_MS,
-} from "@/lib/google/usage";
+import { adjustTypeUsage } from "@/lib/google/usage";
 import { keyFromPath } from "@/lib/s3/keys";
 import {
   deleteFromS3Backend,
@@ -290,6 +286,16 @@ async function uploadTempFile(input: {
   let accounts = db.select().from(googleAccounts).all();
   await refreshStaleQuotas(accounts);
   accounts = db.select().from(googleAccounts).all();
+
+  const targetBucket = db
+    .select({ storageAccountId: buckets.storageAccountId })
+    .from(buckets)
+    .where(eq(buckets.id, bucketId))
+    .get();
+
+  if (targetBucket?.storageAccountId) {
+    accounts = accounts.filter((a) => a.id === targetBucket.storageAccountId);
+  }
 
   const ranked = rankAccounts(accounts, size);
 
@@ -806,6 +812,16 @@ export function getGlobalStats() {
   let totalUsedBytes = 0;
   let unlimitedAccounts = 0;
 
+  const projectUsage = db
+    .select({ accountId: files.accountId, bytes: sql<number>`coalesce(sum(${files.size}), 0)` })
+    .from(files)
+    .where(eq(files.status, "active"))
+    .groupBy(files.accountId)
+    .all();
+  const projectUsageByAccount = new Map(
+    projectUsage.map(({ accountId, bytes }) => [accountId, Number(bytes)]),
+  );
+
   const visibleAccounts = accounts.filter(
     (account) => account.status !== "disconnected",
   );
@@ -838,6 +854,8 @@ export function getGlobalStats() {
       status: account.status,
       quotaLimit: account.quotaLimit,
       quotaUsage: account.quotaUsage,
+      projectUsageBytes: projectUsageByAccount.get(account.id) ?? 0,
+      lastUsedAt: account.lastUsedAt,
       quotaUsageInDrive: account.quotaUsageInDrive,
       lastQuotaSync: account.lastQuotaSync,
       lastError: account.lastError,
@@ -867,43 +885,7 @@ export async function getStorageSummary() {
     usedBytes += account.quotaUsage;
   }
 
-  const cachedRows = db.select().from(typeUsage).all();
-  const cachedByAccount = new Map(
-    cachedRows.map((row) => [row.accountId, row]),
-  );
-  const now = Date.now();
-  const staleAccounts = accounts.filter((account) => {
-    const cached = cachedByAccount.get(account.id);
-
-    return !cached || now - cached.syncedAt > TYPE_USAGE_STALE_MS;
-  });
-
-  if (staleAccounts.length > 0) {
-    await Promise.allSettled(
-      staleAccounts.map((account) => syncAccountTypeUsage(account)),
-    );
-  }
-
-  const freshRows = db.select().from(typeUsage).all();
-  const accountIds = new Set(accounts.map((account) => account.id));
   const breakdown = emptyTypeUsage();
-  let hasCachedTotals = false;
-
-  for (const row of freshRows) {
-    if (!accountIds.has(row.accountId)) {
-      continue;
-    }
-
-    hasCachedTotals = true;
-    breakdown.photos.bytes += row.photosBytes;
-    breakdown.photos.count += row.photosCount;
-    breakdown.videos.bytes += row.videosBytes;
-    breakdown.videos.count += row.videosCount;
-    breakdown.documents.bytes += row.documentsBytes;
-    breakdown.documents.count += row.documentsCount;
-    breakdown.other.bytes += row.otherBytes;
-    breakdown.other.count += row.otherCount;
-  }
 
   const indexedRows = db
     .select({ mimeType: files.mimeType, size: files.size })
@@ -917,12 +899,10 @@ export async function getStorageSummary() {
     indexedBytes += row.size;
   }
 
-  if (!hasCachedTotals) {
-    for (const row of indexedRows) {
-      const category = classifyMimeType(row.mimeType);
-      breakdown[category].bytes += row.size;
-      breakdown[category].count += 1;
-    }
+  for (const row of indexedRows) {
+    const category = classifyMimeType(row.mimeType);
+    breakdown[category].bytes += row.size;
+    breakdown[category].count += 1;
   }
 
   return {

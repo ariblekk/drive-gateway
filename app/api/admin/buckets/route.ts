@@ -35,6 +35,7 @@ export async function GET() {
       buckets: allBuckets.map((bucket) => ({
         id: bucket.id,
         name: bucket.name,
+        storageAccountId: bucket.storageAccountId ?? null,
         createdAt: bucket.createdAt,
         objectCount: statsMap.get(bucket.name)?.objectCount ?? 0,
         totalBytes: statsMap.get(bucket.name)?.totalBytes ?? 0,
@@ -50,14 +51,19 @@ export async function POST(request: Request) {
     await connection();
     const body = (await request.json().catch(() => null)) as {
       name?: unknown;
+      storageAccountId?: unknown;
     } | null;
     const name = typeof body?.name === "string" ? body.name.trim() : "";
+    const storageAccountId =
+      typeof body?.storageAccountId === "string" && body.storageAccountId.trim()
+        ? body.storageAccountId.trim()
+        : null;
 
     if (!name) {
       throw new GatewayError("bad_request", "Bucket name is required", 400);
     }
 
-    const bucket = createBucket(name);
+    const bucket = createBucket(name, storageAccountId);
 
     return json({ bucket }, { status: 201 });
   } catch (error) {

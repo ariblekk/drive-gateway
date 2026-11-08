@@ -1,6 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "cn";
+import {
+  Background,
+  Controls,
+  Handle,
+  Position,
+  ReactFlow,
+  type Edge,
+  type Node,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import {
   IconBrandGoogle,
   IconChartPie,
@@ -36,8 +47,115 @@ import {
   STORAGE_CHANGED_EVENT,
   toMessage,
 } from "./client";
-import { formatBytes, formatDate, quotaPercent } from "./format";
+import { formatBytes, formatDate } from "./format";
 import type { OverviewResponse } from "./types";
+
+function ProjectNode({ data }: { data: { label: string; sublabel: string } }) {
+  return (
+    <div className="relative flex flex-col items-center justify-center rounded-xl border border-primary/50 bg-primary/10 px-4 py-2 text-center shadow-xs">
+      <Handle
+        type="source"
+        position={Position.Top}
+        id="top"
+        className="!size-0 !border-0 !bg-transparent"
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right"
+        className="!size-0 !border-0 !bg-transparent"
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="bottom"
+        className="!size-0 !border-0 !bg-transparent"
+      />
+      <Handle
+        type="source"
+        position={Position.Left}
+        id="left"
+        className="!size-0 !border-0 !bg-transparent"
+      />
+      <span className="text-sm font-semibold">{data.label}</span>
+      <span className="text-xs text-muted-foreground">{data.sublabel}</span>
+    </div>
+  );
+}
+
+function AccountNode({
+  data,
+}: {
+  data: {
+    name: string;
+    subtext: string;
+    provider: "google" | "s3";
+    isLatest: boolean;
+  };
+}) {
+  return (
+    <div
+      className={cn(
+        "flex w-44 items-center gap-2.5 rounded-lg border bg-card px-3 py-2 shadow-xs transition-all",
+        data.isLatest
+          ? "border-primary ring-2 ring-primary/20 shadow-primary/10 shadow-md"
+          : "border-border",
+      )}
+    >
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="top"
+        className="!size-0 !border-0 !bg-transparent"
+      />
+      <Handle
+        type="target"
+        position={Position.Right}
+        id="right"
+        className="!size-0 !border-0 !bg-transparent"
+      />
+      <Handle
+        type="target"
+        position={Position.Bottom}
+        id="bottom"
+        className="!size-0 !border-0 !bg-transparent"
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left"
+        className="!size-0 !border-0 !bg-transparent"
+      />
+
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted">
+        {data.provider === "s3" ? (
+          <IconDatabase className="size-4 text-blue-500" />
+        ) : (
+          <IconBrandGoogle className="size-4 text-amber-500" />
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-xs font-medium">{data.name}</span>
+          {data.isLatest && (
+            <span className="relative flex size-2 shrink-0">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex size-2 rounded-full bg-primary" />
+            </span>
+          )}
+        </div>
+        <div className="truncate text-[10px] text-muted-foreground">
+          {data.subtext}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const nodeTypes = {
+  project: ProjectNode,
+  account: AccountNode,
+};
 
 export function OverviewCards() {
   const [data, setData] = useState<OverviewResponse | null>(null);
@@ -111,9 +229,9 @@ export function OverviewCards() {
       icon: IconFileStack,
     },
     {
-      label: "Storage used",
-      value: formatBytes(stats.totalUsedBytes),
-      hint: `of ${formatBytes(stats.totalLimitBytes)}`,
+      label: "Storage used in project",
+      value: formatBytes(stats.totalFileBytes),
+      hint: `of ${formatBytes(stats.totalLimitBytes)} account capacity`,
       icon: IconChartPie,
     },
     {
@@ -123,6 +241,90 @@ export function OverviewCards() {
       icon: IconCloud,
     },
   ];
+
+  // ponytail: simplified 4-cardinal directional handles; upgrade to dynamic edge-crossing layout if accounts > 30
+  const latestUsedAt = Math.max(
+    ...stats.perAccount.map((item) => item.lastUsedAt ?? 0),
+  );
+  const accountCount = stats.perAccount.length;
+  const rx = Math.max(260, (accountCount * 190) / (2 * Math.PI));
+  const ry = Math.max(140, rx * 0.55);
+
+  const topologyNodes: Node[] = [
+    {
+      id: "project",
+      type: "project",
+      position: { x: -80, y: -28 },
+      data: {
+        label: "Drive Gateway",
+        sublabel: `${formatBytes(stats.totalFileBytes)} stored`,
+      },
+    },
+    ...stats.perAccount.map((account, index) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * index) / (accountCount || 1);
+      const cx = rx * Math.cos(angle);
+      const cy = ry * Math.sin(angle);
+      const isLatest =
+        account.lastUsedAt != null && account.lastUsedAt === latestUsedAt;
+
+      return {
+        id: account.id,
+        type: "account",
+        position: { x: cx - 88, y: cy - 26 },
+        data: {
+          name: account.email,
+          subtext: `${formatBytes(account.projectUsageBytes)} / ${
+            account.quotaLimit === null
+              ? "Unlimited"
+              : formatBytes(account.quotaLimit)
+          }`,
+          provider: account.provider ?? "google",
+          isLatest,
+        },
+      };
+    }),
+  ];
+
+  const topologyEdges: Edge[] = stats.perAccount.map((account, index) => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * index) / (accountCount || 1);
+    const cx = rx * Math.cos(angle);
+    const isLatest =
+      account.lastUsedAt != null && account.lastUsedAt === latestUsedAt;
+
+    let sourceHandle: "top" | "bottom" | "left" | "right";
+    let targetHandle: "top" | "bottom" | "left" | "right";
+
+    if (
+      Math.abs(angle + Math.PI / 2) < Math.PI / 4 ||
+      Math.abs(angle - (3 * Math.PI) / 2) < Math.PI / 4
+    ) {
+      sourceHandle = "top";
+      targetHandle = "bottom";
+    } else if (Math.abs(angle - Math.PI / 2) < Math.PI / 4) {
+      sourceHandle = "bottom";
+      targetHandle = "top";
+    } else if (cx > 0) {
+      sourceHandle = "right";
+      targetHandle = "left";
+    } else {
+      sourceHandle = "left";
+      targetHandle = "right";
+    }
+
+    return {
+      id: `project-${account.id}`,
+      source: "project",
+      sourceHandle,
+      target: account.id,
+      targetHandle,
+      animated: isLatest,
+      style: {
+        stroke: isLatest ? "var(--primary)" : "var(--border)",
+        strokeWidth: isLatest ? 2 : 1.25,
+        opacity: isLatest ? 1 : 0.45,
+      },
+    };
+  });
 
   return (
     <div className="flex flex-col gap-4">
@@ -150,65 +352,37 @@ export function OverviewCards() {
           <CardHeader>
             <CardTitle>Storage per account</CardTitle>
             <CardDescription>
-              Accounts are filled in order of free space.
+              Live storage topology and last upload target.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent>
             {stats.perAccount.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                No Google accounts connected yet.
+                No storage accounts connected yet.
               </p>
             ) : (
-              stats.perAccount.map((account) => {
-                const percent = quotaPercent(
-                  account.quotaLimit,
-                  account.quotaUsage,
-                );
-
-                return (
-                  <div key={account.id} className="flex flex-col gap-1.5">
-                    <div className="flex items-start justify-between gap-2 text-xs">
-                      <div className="flex min-w-0 items-start gap-2">
-                        <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center border border-border bg-muted/40">
-                          {account.provider === "s3" ? (
-                            <IconDatabase className="size-3 text-blue-500" />
-                          ) : (
-                            <IconBrandGoogle className="size-3 text-amber-500" />
-                          )}
-                        </div>
-                        <div className="flex min-w-0 flex-col">
-                          <div className="flex items-center gap-1.5">
-                            <span className="truncate font-medium">
-                              {account.displayName ?? account.email}
-                            </span>
-                            <Badge
-                              variant="outline"
-                              className="text-[9px] uppercase px-1 py-0 h-4"
-                            >
-                              {account.provider === "s3" ? "S3" : "Drive"}
-                            </Badge>
-                          </div>
-                          <span className="truncate text-xs text-muted-foreground">
-                            {account.provider === "s3"
-                              ? `${account.s3Bucket ?? "bucket"} @ ${account.s3Endpoint ?? ""}`
-                              : account.email}
-                          </span>
-                        </div>
-                      </div>
-                      <span className="shrink-0 text-muted-foreground">
-                        {formatBytes(account.quotaUsage)} /{" "}
-                        {formatBytes(account.quotaLimit)}
-                      </span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-none bg-muted">
-                      <div
-                        className="h-full bg-primary transition-all"
-                        style={{ width: `${percent ?? 0}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })
+              <div className="h-72 w-full overflow-hidden border bg-muted/10 sm:h-96">
+                <ReactFlow
+                  nodes={topologyNodes}
+                  edges={topologyEdges}
+                  nodeTypes={nodeTypes}
+                  fitView
+                  fitViewOptions={{ padding: 0.2 }}
+                  minZoom={0.4}
+                  maxZoom={2}
+                  zoomOnScroll
+                  zoomActivationKeyCode="Control"
+                  zoomOnPinch
+                  panOnDrag
+                  elementsSelectable={false}
+                  nodesDraggable={false}
+                  nodesConnectable={false}
+                  proOptions={{ hideAttribution: true }}
+                >
+                  <Background color="var(--border)" gap={20} size={1} />
+                  <Controls showInteractive={false} />
+                </ReactFlow>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -227,6 +401,7 @@ export function OverviewCards() {
                   <TableRow>
                     <TableHead>Action</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Target</TableHead>
                     <TableHead>Size</TableHead>
                     <TableHead>When</TableHead>
                   </TableRow>
@@ -245,6 +420,12 @@ export function OverviewCards() {
                         >
                           {entry.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell
+                        className="max-w-[140px] truncate text-muted-foreground"
+                        title={entry.accountEmail ?? "-"}
+                      >
+                        {entry.accountEmail ?? "-"}
                       </TableCell>
                       <TableCell>{formatBytes(entry.bytes)}</TableCell>
                       <TableCell className="text-muted-foreground">

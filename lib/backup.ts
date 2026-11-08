@@ -8,6 +8,7 @@ import {
   files,
   folders,
   getDb,
+  loginAttempts,
   s3Credentials,
   storageAccounts,
   typeUsage,
@@ -73,6 +74,7 @@ const folderSchema = z.object({
 const bucketSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  storageAccountId: z.string().nullable().optional(),
   createdAt: z.number().int(),
 });
 
@@ -108,6 +110,13 @@ const fileSchema = z.object({
   updatedAt: z.number().int(),
 });
 
+const loginAttemptSchema = z.object({
+  id: z.string().min(1),
+  ip: z.string().min(1),
+  email: z.string().min(1),
+  createdAt: z.number().int(),
+});
+
 const apiKeySchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -130,6 +139,7 @@ const backupSchema = z.object({
     s3Credentials: z.array(s3CredentialSchema).default([]),
     files: z.array(fileSchema).default([]),
     apiKeys: z.array(apiKeySchema).default([]),
+    loginAttempts: z.array(loginAttemptSchema).default([]),
   }),
 });
 
@@ -153,6 +163,7 @@ export interface BackupCounts {
   s3Credentials: number;
   files: number;
   apiKeys: number;
+  loginAttempts: number;
 }
 
 export interface GatewayBackup {
@@ -176,6 +187,7 @@ export function createBackup(): GatewayBackup {
   const credentials = db.select().from(s3Credentials).all();
   const fileRows = db.select().from(files).all();
   const keys = db.select().from(apiKeys).all();
+  const attempts = db.select().from(loginAttempts).all();
 
   return {
     type: BACKUP_TYPE,
@@ -189,6 +201,7 @@ export function createBackup(): GatewayBackup {
       s3Credentials: credentials.length,
       files: fileRows.length,
       apiKeys: keys.length,
+      loginAttempts: attempts.length,
     },
     data: {
       storageAccounts: accounts,
@@ -198,6 +211,7 @@ export function createBackup(): GatewayBackup {
       s3Credentials: credentials,
       files: fileRows,
       apiKeys: keys,
+      loginAttempts: attempts,
     },
   };
 }
@@ -250,6 +264,7 @@ function parseBackup(input: unknown): BackupData {
       folders: [],
       buckets: [],
       files: [],
+      loginAttempts: [],
     };
   }
 
@@ -280,6 +295,7 @@ export function restoreBackup(input: unknown): RestoreResult {
       s3Credentials: 0,
       files: 0,
       apiKeys: 0,
+      loginAttempts: 0,
     };
 
     for (const bucket of data.buckets) {
@@ -504,6 +520,25 @@ export function restoreBackup(input: unknown): RestoreResult {
       }
 
       restored.apiKeys += 1;
+    }
+
+    for (const attempt of data.loginAttempts) {
+      const existing = tx
+        .select()
+        .from(loginAttempts)
+        .where(eq(loginAttempts.id, attempt.id))
+        .get();
+
+      if (existing) {
+        tx.update(loginAttempts)
+          .set(attempt)
+          .where(eq(loginAttempts.id, attempt.id))
+          .run();
+      } else {
+        tx.insert(loginAttempts).values(attempt).run();
+      }
+
+      restored.loginAttempts += 1;
     }
 
     return { restored };

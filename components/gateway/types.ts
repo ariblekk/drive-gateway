@@ -40,9 +40,11 @@ export interface AccountStats {
   status: string;
   quotaLimit: number | null;
   quotaUsage: number;
+  projectUsageBytes: number;
   quotaUsageInDrive: number;
   lastQuotaSync: number | null;
   lastError: string | null;
+  lastUsedAt: number | null;
 }
 
 export interface Stats {
@@ -90,6 +92,7 @@ export interface FileItem {
 export interface BucketItem {
   id: string;
   name: string;
+  storageAccountId?: string | null;
   createdAt: number;
   objectCount: number;
   totalBytes: number;

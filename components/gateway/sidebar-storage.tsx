@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
 import {
-  IconCloud,
   IconFileText,
   IconPhoto,
   IconVideo,
@@ -61,7 +60,7 @@ export function SidebarStorage() {
   }, [pathname]);
 
   const percent = summary
-    ? quotaPercent(summary.limitBytes, summary.usedBytes)
+    ? quotaPercent(summary.limitBytes, summary.indexedBytes)
     : null;
 
   return (
@@ -88,25 +87,12 @@ export function SidebarStorage() {
                   </div>
                 ))}
 
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2">
-                    <span className="flex size-4 shrink-0 items-center justify-center">
-                      <IconCloud className="size-4 text-orange-500" />
-                    </span>
-                    <span>Free Storage</span>
-                  </span>
-                  <span className="shrink-0 tabular-nums text-foreground">
-                    {summary.unlimitedAccounts > 0
-                      ? "Unlimited"
-                      : formatBytes(summary.freeBytes)}
-                  </span>
-                </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-medium text-foreground">
-                    {formatBytes(summary.usedBytes)} used
+                    {formatBytes(summary.indexedBytes)} used in project
                   </span>
                   <span className="shrink-0 tabular-nums text-muted-foreground">
                     {summary.unlimitedAccounts > 0
