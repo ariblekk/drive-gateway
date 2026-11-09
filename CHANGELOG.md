@@ -36,6 +36,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Centralized Storage Backend Operations**:
+  - Consolidated provider-specific upload, download, delete, checksum, and quota dispatching into `lib/storage/backend.ts`.
+  - Updated file, folder, and quota services to call the shared dispatcher instead of branching between Google Drive and S3 at each call site.
+
 - **Storage Metrics Consistency**:
   - Differentiated project-stored files (`totalFileBytes` / `indexedBytes`) from provider account capacity (`limitBytes`).
   - Synchronized Sidebar and Overview: "Storage used" reflects project-indexed data, while "Free space" continues to track aggregate provider remaining quota.

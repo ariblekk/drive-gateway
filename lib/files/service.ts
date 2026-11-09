@@ -24,24 +24,16 @@ import {
   getFolderById,
   getFolderPath,
 } from "@/lib/folders/service";
-import {
-  getAuthorizedClient,
-} from "@/lib/google/client";
-import {
-  downloadFileStream,
-  getFileChecksum,
-  removeFile,
-  uploadFromPath,
-} from "@/lib/google/drive";
 import { syncAccountQuota } from "@/lib/google/quota";
 import { rankAccounts } from "@/lib/google/selection";
 import { adjustTypeUsage } from "@/lib/google/usage";
 import { keyFromPath } from "@/lib/s3/keys";
 import {
-  deleteFromS3Backend,
-  downloadFromS3Backend,
-  uploadToS3Backend,
-} from "@/lib/storage/s3-backend";
+  deleteFromBackend,
+  downloadFromBackend,
+  getBackendChecksum,
+  uploadToBackend,
+} from "@/lib/storage/backend";
 
 const QUOTA_STALE_MS = 5 * 60 * 1000;
 const MAX_UPLOAD_ATTEMPTS = 3;
@@ -320,35 +312,17 @@ async function uploadTempFile(input: {
     try {
       const now = Date.now();
       const id = crypto.randomUUID();
-      let remoteId: string;
       let md5Checksum: string | null = null;
 
-      if (account.provider === "s3") {
-        const uploaded = await uploadToS3Backend(account, {
-          filePath: input.tempPath,
-          name: input.name,
-          mimeType: input.mimeType,
-          fileId: id,
-          md5: input.md5,
-        });
-        remoteId = uploaded.remoteId;
-        md5Checksum = uploaded.md5Checksum ?? null;
-      } else {
-        const auth = await getAuthorizedClient(account);
-        const uploaded = await uploadFromPath({
-          auth,
-          filePath: input.tempPath,
-          name: input.name,
-          mimeType: input.mimeType,
-        });
-
-        if (!uploaded.id) {
-          throw new Error("Google Drive did not return a file id");
-        }
-
-        remoteId = uploaded.id;
-        md5Checksum = uploaded.md5Checksum ?? null;
-      }
+      const uploaded = await uploadToBackend(account, {
+        filePath: input.tempPath,
+        name: input.name,
+        mimeType: input.mimeType,
+        fileId: id,
+        md5: input.md5,
+      });
+      const remoteId = uploaded.remoteId;
+      md5Checksum = uploaded.md5Checksum ?? null;
 
       db.insert(files)
         .values({
@@ -554,16 +528,8 @@ export async function ensureFileEtag(
   try {
     const account = getAccountById(file.accountId);
 
-    if (account.provider === "s3") {
-      return file.etag ?? file.id;
-    }
-
-    const auth = await getAuthorizedClient(account);
-    const checksum = await getFileChecksum({
-      auth,
-      driveFileId: file.driveFileId,
-    });
-    const etag = checksum.md5Checksum ?? file.id;
+    const checksum = await getBackendChecksum(account, file.driveFileId);
+    const etag = checksum?.md5Checksum ?? file.id;
     updateFileEtag(file.id, etag);
     return etag;
   } catch {
@@ -600,31 +566,11 @@ export async function openFileDownload(
   const file = getFileById(id);
   const account = getAccountById(file.accountId);
 
-  let response: {
-    data: Readable;
-    status: number;
-    headers: Record<string, string>;
-  };
-
-  if (account.provider === "s3") {
-    response = await downloadFromS3Backend(
-      account,
-      file.driveFileId,
-      range,
-    );
-  } else {
-    const auth = await getAuthorizedClient(account);
-    const driveRes = await downloadFileStream({
-      auth,
-      driveFileId: file.driveFileId,
-      range,
-    });
-    response = {
-      data: driveRes.data as unknown as Readable,
-      status: driveRes.status,
-      headers: (driveRes.headers ?? {}) as Record<string, string>,
-    };
-  }
+  const response = await downloadFromBackend(
+    account,
+    file.driveFileId,
+    range,
+  );
 
   recordActivity({
     action: "download",
@@ -652,27 +598,13 @@ export async function deleteFilePermanentlyById(
     .get();
 
   if (deleteRemote && account && account.status !== "disconnected") {
-    if (account.provider === "s3") {
-      try {
-        await deleteFromS3Backend(account, file.driveFileId);
-      } catch (error) {
-        const message = errorMessage(error);
+    try {
+      await deleteFromBackend(account, file.driveFileId);
+    } catch (error) {
+      const message = errorMessage(error);
 
-        if (!/not found|404/i.test(message)) {
-          throw error;
-        }
-      }
-    } else {
-      const auth = await getAuthorizedClient(account);
-
-      try {
-        await removeFile({ auth, driveFileId: file.driveFileId });
-      } catch (error) {
-        const message = errorMessage(error);
-
-        if (!/not found|404/i.test(message)) {
-          throw error;
-        }
+      if (!/not found|404/i.test(message)) {
+        throw error;
       }
     }
   }

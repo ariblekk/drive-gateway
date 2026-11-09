@@ -6,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export function SiteHeader() {
-  const { title, count, actions } = useHeader();
+  const { title, titleContent, count, actions } = useHeader();
 
   return (
     <header className="sticky top-0 z-10 flex h-(--header-height) shrink-0 items-center gap-2 border-b bg-background transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
@@ -17,11 +17,15 @@ export function SiteHeader() {
             orientation="vertical"
             className="mx-2 data-[orientation=vertical]:h-4"
           />
-          <h1 className="truncate text-base font-medium">{title}</h1>
-          {count !== null && (
-            <Badge variant="secondary" className="text-xs tabular-nums">
-              {count}
-            </Badge>
+          {titleContent ?? (
+            <>
+              <h1 className="truncate text-base font-medium">{title}</h1>
+              {count !== null && (
+                <Badge variant="secondary" className="text-xs tabular-nums">
+                  {count}
+                </Badge>
+              )}
+            </>
           )}
         </div>
         {actions && (

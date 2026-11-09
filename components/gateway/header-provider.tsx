@@ -21,6 +21,8 @@ const ROUTE_TITLES: Record<string, string> = {
 interface HeaderContextValue {
   title: string;
   setCustomTitle: (title: string | null) => void;
+  titleContent: ReactNode | null;
+  setTitleContent: (content: ReactNode | null) => void;
   count: number | null;
   setCount: (count: number | null) => void;
   actions: ReactNode | null;
@@ -32,6 +34,7 @@ const HeaderContext = createContext<HeaderContextValue | null>(null);
 export function HeaderProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [customTitle, setCustomTitle] = useState<string | null>(null);
+  const [titleContent, setTitleContent] = useState<ReactNode | null>(null);
   const [count, setCount] = useState<number | null>(null);
   const [actions, setActions] = useState<ReactNode | null>(null);
 
@@ -46,6 +49,8 @@ export function HeaderProvider({ children }: { children: ReactNode }) {
       value={{
         title,
         setCustomTitle,
+        titleContent,
+        setTitleContent,
         count,
         setCount,
         actions,

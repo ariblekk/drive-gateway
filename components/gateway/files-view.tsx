@@ -6,6 +6,8 @@ import {
   IconBrandGoogle,
   IconChevronLeft,
   IconChevronRight,
+  IconChevronsLeft,
+  IconChevronsRight,
   IconDatabase,
   IconDotsVertical,
   IconDownload,
@@ -18,6 +20,15 @@ import {
   IconUpload,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
+
+import {
+  columnVisibilityFeature,
+  createColumnHelper,
+  FlexRender,
+  tableFeatures,
+  useTable,
+  type ColumnVisibilityState,
+} from "@tanstack/react-table";
 
 import {
   AlertDialog,
@@ -59,6 +70,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -106,6 +118,25 @@ interface FolderActionState {
 }
 
 const PAGE_SIZE = 20;
+
+interface FilesTableRow {
+  id: string;
+  name: string;
+  size: string;
+  account: string;
+  path: string;
+  status: string;
+  createdAt: string;
+  folder?: FolderItem;
+  file?: FileItem;
+}
+
+const filesTableFeatures = tableFeatures({ columnVisibilityFeature });
+
+const filesColumnHelper = createColumnHelper<
+  typeof filesTableFeatures,
+  FilesTableRow
+>();
 
 export function FilesView() {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
@@ -159,9 +190,13 @@ export function FilesView() {
     useState<string>("");
   const [deletingBucket, setDeletingBucket] = useState(false);
   const [deleteBucketOpen, setDeleteBucketOpen] = useState(false);
+  const [bucketToDelete, setBucketToDelete] = useState<string | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [columnVisibility, setColumnVisibility] =
+    useState<ColumnVisibilityState>({});
   const { openUploadDialog } = useUploadDialog();
-  const { setActions, setCount, setCustomTitle } = useHeader();
+  const { setActions, setTitleContent } = useHeader();
 
   const fetchBuckets = useCallback(async () => {
     return apiGet<{ buckets: BucketItem[] }>("/api/admin/buckets");
@@ -182,7 +217,7 @@ export function FilesView() {
   const fetchFiles = useCallback(
     (query: string) => {
       const params = new URLSearchParams();
-      params.set("limit", String(PAGE_SIZE));
+      params.set("limit", String(pageSize));
       params.set("offset", String(offset));
       params.set("bucketId", selectedBucket);
       params.set("folderId", currentFolderId ?? "root");
@@ -195,7 +230,7 @@ export function FilesView() {
         `/api/admin/files?${params.toString()}`,
       );
     },
-    [currentFolderId, offset, selectedBucket],
+    [currentFolderId, offset, pageSize, selectedBucket],
   );
 
   const load = useCallback(async () => {
@@ -258,32 +293,34 @@ export function FilesView() {
     return data.folders;
   }, [selectedBucket]);
 
-  const switchBucket = (name: string) => {
+  const switchBucket = useCallback((name: string) => {
     localStorage.setItem("drive:selected-bucket", name);
     window.dispatchEvent(new Event("drive:bucket-change"));
     setCurrentFolderId(null);
-    clearSelection();
+    setSelectedIds(new Set());
+    setSelectedFolderIds(new Set());
     setQ("");
     setAppliedQ("");
     setOffset(0);
-  };
+  }, []);
 
   const handleDeleteBucket = async () => {
-    if (selectedBucket === "default") return;
+    const name = bucketToDelete ?? selectedBucket;
+
+    if (name === "default") return;
 
     setDeletingBucket(true);
     try {
-      await apiSend(
-        `/api/admin/buckets/${encodeURIComponent(selectedBucket)}`,
-        "DELETE",
-      );
-      toast.success(`Bucket "${selectedBucket}" deleted.`);
+      await apiSend(`/api/admin/buckets/${encodeURIComponent(name)}`, "DELETE");
+      toast.success(`Bucket "${name}" deleted.`);
       setDeleteBucketOpen(false);
-      switchBucket("default");
-      setBuckets((current) =>
-        current.filter((bucket) => bucket.name !== selectedBucket),
-      );
-      setCurrentFolderId(null);
+      setBucketToDelete(null);
+      setBuckets((current) => current.filter((bucket) => bucket.name !== name));
+
+      if (name === selectedBucket) {
+        switchBucket("default");
+        setCurrentFolderId(null);
+      }
     } catch (cause) {
       toast.error(toMessage(cause));
     } finally {
@@ -424,9 +461,9 @@ export function FilesView() {
     );
   };
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(
-    Math.max(1, Math.floor(offset / PAGE_SIZE) + 1),
+    Math.max(1, Math.floor(offset / pageSize) + 1),
     totalPages,
   );
 
@@ -619,23 +656,49 @@ export function FilesView() {
 
   useEffect(() => {
     setActions(
-      <ButtonGroup>
-        <Button
-          variant="outline"
-          aria-label="New folder"
-          onClick={() => void openFolderForm({ type: "create" })}
-        >
-          <IconFolderPlus />
-          <span className="hidden sm:inline">New folder</span>
-        </Button>
-        <Button
-          aria-label="Upload"
-          onClick={() => openUploadDialog(currentFolderId, selectedBucket)}
-        >
-          <IconUpload />
-          <span className="hidden sm:inline">Upload</span>
-        </Button>
-      </ButtonGroup>,
+      <div className="flex items-center gap-2">
+        <ButtonGroup>
+          <Button
+            variant="outline"
+            aria-label="New bucket"
+            title="New bucket"
+            onClick={() => setNewBucketOpen(true)}
+          >
+            <IconPlus />
+            <span className="hidden sm:inline">New bucket</span>
+          </Button>
+          <Button
+            variant="destructive"
+            aria-label={`Delete bucket ${selectedBucket}`}
+            title={`Delete bucket ${selectedBucket}`}
+            disabled={selectedBucket === "default"}
+            onClick={() => {
+              setBucketToDelete(selectedBucket);
+              setDeleteBucketOpen(true);
+            }}
+          >
+            <IconTrash />
+            <span className="hidden sm:inline">Delete bucket</span>
+          </Button>
+        </ButtonGroup>
+        <ButtonGroup>
+          <Button
+            variant="outline"
+            aria-label="New folder"
+            onClick={() => void openFolderForm({ type: "create" })}
+          >
+            <IconFolderPlus />
+            <span className="hidden sm:inline">New folder</span>
+          </Button>
+          <Button
+            aria-label="Upload"
+            onClick={() => openUploadDialog(currentFolderId, selectedBucket)}
+          >
+            <IconUpload />
+            <span className="hidden sm:inline">Upload</span>
+          </Button>
+        </ButtonGroup>
+      </div>,
     );
 
     return () => {
@@ -649,29 +712,28 @@ export function FilesView() {
     setActions,
   ]);
 
-  const currentFolder = breadcrumbs[breadcrumbs.length - 1];
-
   useEffect(() => {
-    if (files !== null) {
-      setCount(total);
-    }
-    return () => {
-      setCount(null);
-    };
-  }, [files, total, setCount]);
+    setTitleContent(
+      <Select value={selectedBucket} onValueChange={switchBucket}>
+        <SelectTrigger className="h-8 w-[180px]" aria-label="Bucket">
+          <SelectValue placeholder="Bucket" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {buckets.map((bucket) => (
+              <SelectItem key={bucket.name} value={bucket.name}>
+                {bucket.name}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>,
+    );
 
-  useEffect(() => {
-    if (currentFolder) {
-      setCustomTitle(currentFolder.name);
-    } else if (selectedBucket !== "default") {
-      setCustomTitle(selectedBucket);
-    } else {
-      setCustomTitle(null);
-    }
     return () => {
-      setCustomTitle(null);
+      setTitleContent(null);
     };
-  }, [currentFolder, selectedBucket, setCustomTitle]);
+  }, [buckets, selectedBucket, switchBucket, setTitleContent]);
 
   const submitFolderForm = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -759,6 +821,245 @@ export function FilesView() {
   const isLoading = folders === null || files === null;
   const hasItems = visibleFolders.length > 0 || (files && files.length > 0);
 
+  const tableRows: FilesTableRow[] = [
+    ...visibleFolders.map((folder) => ({
+      id: `folder-${folder.id}`,
+      name: folder.name,
+      size: "—",
+      account: "—",
+      path: folder.path,
+      status: folder.status,
+      createdAt: formatDate(folder.createdAt),
+      folder,
+    })),
+    ...(files ?? []).map((file) => ({
+      id: file.id,
+      name: file.name,
+      size: formatBytes(file.size),
+      account: file.accountEmail ?? "—",
+      path: file.path,
+      status: file.status,
+      createdAt: formatDate(file.createdAt),
+      file,
+    })),
+  ];
+
+  const columns = filesColumnHelper.columns([
+    filesColumnHelper.display({
+      id: "select",
+      header: () => (
+        <Checkbox
+          checked={allSelected ? true : someSelected ? "indeterminate" : false}
+          onCheckedChange={(value) => toggleAll(Boolean(value))}
+          aria-label="Select all files"
+        />
+      ),
+      cell: ({ row }) => {
+        const { folder, file } = row.original;
+
+        if (folder) {
+          return (
+            <Checkbox
+              checked={selectedFolderIds.has(folder.id)}
+              onCheckedChange={(value) =>
+                toggleFolderSelected(folder.id, Boolean(value))
+              }
+              aria-label={`Select ${folder.name}`}
+            />
+          );
+        }
+
+        if (!file) return null;
+
+        return (
+          <Checkbox
+            checked={selectedIds.has(file.id)}
+            onCheckedChange={(value) => toggleSelected(file.id, Boolean(value))}
+            aria-label={`Select ${file.name}`}
+          />
+        );
+      },
+      enableHiding: false,
+    }),
+    filesColumnHelper.accessor("name", {
+      header: "Name",
+      cell: ({ row }) => {
+        const { folder, name } = row.original;
+
+        if (folder) {
+          return (
+            <button
+              type="button"
+              className="flex min-w-0 items-center gap-2 text-left hover:underline"
+              onClick={() => navigateTo(folder.id)}
+            >
+              <IconFolder className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate font-medium">{name}</span>
+            </button>
+          );
+        }
+
+        return (
+          <span className="block max-w-64 truncate font-medium">{name}</span>
+        );
+      },
+      enableHiding: false,
+    }),
+    filesColumnHelper.accessor("size", { header: "Size" }),
+    filesColumnHelper.accessor("account", {
+      header: "Account",
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">
+          {row.original.account}
+        </span>
+      ),
+    }),
+    filesColumnHelper.accessor("path", {
+      id: "folder",
+      header: "Folder",
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">
+          {row.original.path}
+        </span>
+      ),
+    }),
+    filesColumnHelper.accessor("status", {
+      header: "Status",
+      cell: ({ row }) => (
+        <Badge
+          variant={
+            row.original.status === "active"
+              ? "secondary"
+              : row.original.folder
+                ? "destructive"
+                : "outline"
+          }
+        >
+          {row.original.status}
+        </Badge>
+      ),
+    }),
+    filesColumnHelper.accessor("createdAt", {
+      id: "created",
+      header: "Created",
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">
+          {row.original.createdAt}
+        </span>
+      ),
+    }),
+    filesColumnHelper.display({
+      id: "actions",
+      header: () => <div className="w-full text-right">Actions</div>,
+      cell: ({ row }) => {
+        const { folder, file } = row.original;
+
+        if (folder) {
+          return (
+            <div className="flex justify-end">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Actions for ${folder.name}`}
+                    disabled={busyId === folder.id}
+                  >
+                    <IconDotsVertical />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-48">
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      void openFolderForm({ type: "rename", folder })
+                    }
+                    disabled={busyId === folder.id}
+                  >
+                    <IconPencil />
+                    Rename
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      void openFolderForm({ type: "move", folder })
+                    }
+                    disabled={busyId === folder.id}
+                  >
+                    <IconArrowsMove />
+                    Move
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => setFolderAction({ folder })}
+                    disabled={busyId === folder.id}
+                  >
+                    <IconTrash />
+                    Delete permanently
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          );
+        }
+
+        if (!file) return null;
+
+        return (
+          <div className="flex justify-end">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Actions for ${file.name}`}
+                  disabled={busyId === file.id}
+                >
+                  <IconDotsVertical />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-48">
+                <DropdownMenuItem asChild>
+                  <a
+                    href={`/api/admin/files/${file.id}/download`}
+                    onClick={() => toast.info(`Downloading ${file.name}`)}
+                  >
+                    <IconDownload />
+                    Download
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void openMoveSingle(file)}
+                  disabled={busyId === file.id}
+                >
+                  <IconArrowsMove />
+                  Move to folder
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => setFileToDelete(file)}
+                  disabled={busyId === file.id}
+                >
+                  <IconTrash />
+                  Delete permanently
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        );
+      },
+      enableHiding: false,
+    }),
+  ]);
+
+  const table = useTable({
+    features: filesTableFeatures,
+    data: tableRows,
+    columns,
+    state: { columnVisibility },
+    onColumnVisibilityChange: setColumnVisibility,
+  });
+
   return (
     <div
       className={`flex flex-col gap-4${
@@ -766,85 +1067,52 @@ export function FilesView() {
       }`}
     >
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="font-medium text-muted-foreground">Bucket:</span>
-              <Select value={selectedBucket} onValueChange={switchBucket}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Bucket" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {buckets.map((b) => (
-                      <SelectItem key={b.name} value={b.name}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedBucket !== "default" && (
-              <Button
-                variant="destructive"
-                onClick={() => setDeleteBucketOpen(true)}
-              >
-                <IconTrash className="size-3.5" />
-                <span className="hidden sm:inline">Delete bucket</span>
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => setNewBucketOpen(true)}>
-              <IconPlus className="size-3.5" />
-              <span className="hidden sm:inline">New bucket</span>
-            </Button>
-          </div>
-
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                {breadcrumbs.length === 0 ? (
-                  <BreadcrumbPage>Root</BreadcrumbPage>
-                ) : (
-                  <BreadcrumbLink asChild>
-                    <button
-                      type="button"
-                      onClick={() => navigateTo(null)}
-                      className="cursor-pointer"
-                    >
-                      Root
-                    </button>
-                  </BreadcrumbLink>
-                )}
-              </BreadcrumbItem>
-              {breadcrumbs.map((crumb, index) => {
-                const isLast = index === breadcrumbs.length - 1;
-                return (
-                  <span
-                    key={crumb.id}
-                    className="inline-flex items-center gap-1.5"
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              {breadcrumbs.length === 0 ? (
+                <BreadcrumbPage>Root</BreadcrumbPage>
+              ) : (
+                <BreadcrumbLink asChild>
+                  <button
+                    type="button"
+                    onClick={() => navigateTo(null)}
+                    className="cursor-pointer"
                   >
-                    <BreadcrumbSeparator />
-                    <BreadcrumbItem>
-                      {isLast ? (
-                        <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
-                      ) : (
-                        <BreadcrumbLink asChild>
-                          <button
-                            type="button"
-                            onClick={() => navigateTo(crumb.id)}
-                            className="cursor-pointer"
-                          >
-                            {crumb.name}
-                          </button>
-                        </BreadcrumbLink>
-                      )}
-                    </BreadcrumbItem>
-                  </span>
-                );
-              })}
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
+                    Root
+                  </button>
+                </BreadcrumbLink>
+              )}
+            </BreadcrumbItem>
+            {breadcrumbs.map((crumb, index) => {
+              const isLast = index === breadcrumbs.length - 1;
+              return (
+                <span
+                  key={crumb.id}
+                  className="inline-flex items-center gap-1.5"
+                >
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    {isLast ? (
+                      <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
+                    ) : (
+                      <BreadcrumbLink asChild>
+                        <button
+                          type="button"
+                          onClick={() => navigateTo(crumb.id)}
+                          className="cursor-pointer"
+                        >
+                          {crumb.name}
+                        </button>
+                      </BreadcrumbLink>
+                    )}
+                  </BreadcrumbItem>
+                </span>
+              );
+            })}
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
 
       <Card>
         <CardContent className="flex flex-col gap-3">
@@ -866,7 +1134,7 @@ export function FilesView() {
               }}
               placeholder="Search by name"
             />
-            <Button variant="outline" size="sm" onClick={applySearch}>
+            <Button variant="outline" onClick={applySearch}>
               <IconSearch />
               Search
             </Button>
@@ -880,238 +1148,128 @@ export function FilesView() {
             </p>
           ) : (
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8">
-                    <Checkbox
-                      checked={
-                        allSelected
-                          ? true
-                          : someSelected
-                            ? "indeterminate"
-                            : false
-                      }
-                      onCheckedChange={(value) => toggleAll(Boolean(value))}
-                      aria-label="Select all files"
-                    />
-                  </TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Folder</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
+              <TableHeader className="sticky top-0 z-10 bg-muted">
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <TableHead key={header.id} colSpan={header.colSpan}>
+                        {header.isPlaceholder ? null : (
+                          <FlexRender header={header} />
+                        )}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
               </TableHeader>
               <TableBody>
-                {visibleFolders.map((folder) => (
-                  <TableRow key={`folder-${folder.id}`}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedFolderIds.has(folder.id)}
-                        onCheckedChange={(value) =>
-                          toggleFolderSelected(folder.id, Boolean(value))
-                        }
-                        aria-label={`Select ${folder.name}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <button
-                        type="button"
-                        className="flex min-w-0 items-center gap-2 text-left hover:underline disabled:cursor-default disabled:no-underline"
-                        onClick={() => navigateTo(folder.id)}
-                      >
-                        <IconFolder className="size-4 shrink-0 text-muted-foreground" />
-                        <span className="truncate font-medium">
-                          {folder.name}
-                        </span>
-                      </button>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      —
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      —
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {folder.path}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          folder.status === "active"
-                            ? "secondary"
-                            : "destructive"
-                        }
-                      >
-                        {folder.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {formatDate(folder.createdAt)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Actions for ${folder.name}`}
-                              disabled={busyId === folder.id}
-                            >
-                              <IconDotsVertical />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="min-w-48">
-                            <DropdownMenuItem
-                              onSelect={() =>
-                                void openFolderForm({ type: "rename", folder })
-                              }
-                              disabled={busyId === folder.id}
-                            >
-                              <IconPencil />
-                              Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() =>
-                                void openFolderForm({ type: "move", folder })
-                              }
-                              disabled={busyId === folder.id}
-                            >
-                              <IconArrowsMove />
-                              Move
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onSelect={() => setFolderAction({ folder })}
-                              disabled={busyId === folder.id}
-                            >
-                              <IconTrash />
-                              Delete permanently
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                {table.getRowModel().rows.length ? (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow key={row.id}>
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                          <FlexRender cell={cell} />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={columns.length}
+                      className="h-24 text-center"
+                    >
+                      No results.
                     </TableCell>
                   </TableRow>
-                ))}
-                {files?.map((file) => (
-                  <TableRow key={file.id}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedIds.has(file.id)}
-                        onCheckedChange={(value) =>
-                          toggleSelected(file.id, Boolean(value))
-                        }
-                        aria-label={`Select ${file.name}`}
-                      />
-                    </TableCell>
-                    <TableCell className="max-w-64 truncate font-medium">
-                      {file.name}
-                    </TableCell>
-                    <TableCell>{formatBytes(file.size)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {file.accountEmail ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {file.path}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          file.status === "active" ? "secondary" : "outline"
-                        }
-                      >
-                        {file.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {formatDate(file.createdAt)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Actions for ${file.name}`}
-                              disabled={busyId === file.id}
-                            >
-                              <IconDotsVertical />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="min-w-48">
-                            <DropdownMenuItem asChild>
-                              <a
-                                href={`/api/admin/files/${file.id}/download`}
-                                onClick={() =>
-                                  toast.info(`Downloading ${file.name}`)
-                                }
-                              >
-                                <IconDownload />
-                                Download
-                              </a>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => void openMoveSingle(file)}
-                              disabled={busyId === file.id}
-                            >
-                              <IconArrowsMove />
-                              Move to folder
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onSelect={() => setFileToDelete(file)}
-                              disabled={busyId === file.id}
-                            >
-                              <IconTrash />
-                              Delete permanently
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           )}
 
           {files !== null && total > 0 && (
-            <div className="flex flex-col gap-2 border-t border-border pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>
+            <div className="flex items-center justify-between border-t border-border pt-3">
+              <div className="hidden flex-1 text-sm text-muted-foreground lg:flex">
                 {`${Math.min(offset + 1, total)}–${Math.min(
-                  offset + PAGE_SIZE,
+                  offset + pageSize,
                   total,
                 )} of ${total}`}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => goToOffset(offset - PAGE_SIZE)}
-                  disabled={offset === 0}
-                >
-                  <IconChevronLeft />
-                  Previous
-                </Button>
-                <span>
+              </div>
+              <div className="flex w-full items-center gap-8 lg:w-fit">
+                <div className="hidden items-center gap-2 lg:flex">
+                  <Label
+                    htmlFor="rows-per-page"
+                    className="text-sm font-medium"
+                  >
+                    Rows per page
+                  </Label>
+                  <Select
+                    value={`${pageSize}`}
+                    onValueChange={(value) => {
+                      setPageSize(Number(value));
+                      setOffset(0);
+                    }}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className="w-20"
+                      id="rows-per-page"
+                    >
+                      <SelectValue placeholder={pageSize} />
+                    </SelectTrigger>
+                    <SelectContent side="top">
+                      {[10, 20, 30, 40, 50].map((size) => (
+                        <SelectItem key={size} value={`${size}`}>
+                          {size}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex w-fit items-center justify-center text-sm font-medium">
                   Page {currentPage} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => goToOffset(offset + PAGE_SIZE)}
-                  disabled={offset + PAGE_SIZE >= total}
-                >
-                  Next
-                  <IconChevronRight />
-                </Button>
+                </div>
+                <div className="ml-auto flex items-center gap-2 lg:ml-0">
+                  <Button
+                    variant="outline"
+                    className="hidden size-8 lg:flex"
+                    size="icon"
+                    onClick={() => goToOffset(0)}
+                    disabled={currentPage === 1}
+                  >
+                    <span className="sr-only">Go to first page</span>
+                    <IconChevronsLeft />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="size-8"
+                    size="icon"
+                    onClick={() => goToOffset(offset - pageSize)}
+                    disabled={currentPage === 1}
+                  >
+                    <span className="sr-only">Go to previous page</span>
+                    <IconChevronLeft />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="size-8"
+                    size="icon"
+                    onClick={() => goToOffset(offset + pageSize)}
+                    disabled={currentPage === totalPages}
+                  >
+                    <span className="sr-only">Go to next page</span>
+                    <IconChevronRight />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="hidden size-8 lg:flex"
+                    size="icon"
+                    onClick={() => goToOffset((totalPages - 1) * pageSize)}
+                    disabled={currentPage === totalPages}
+                  >
+                    <span className="sr-only">Go to last page</span>
+                    <IconChevronsRight />
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -1335,7 +1493,9 @@ export function FilesView() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {selectedCount} item(s) permanently?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete {selectedCount} item(s) permanently?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               All selected files and folders will be permanently deleted from
               storage. This action cannot be undone.
@@ -1358,11 +1518,17 @@ export function FilesView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <AlertDialog open={deleteBucketOpen} onOpenChange={setDeleteBucketOpen}>
+      <AlertDialog
+        open={deleteBucketOpen}
+        onOpenChange={(open) => {
+          setDeleteBucketOpen(open);
+          if (!open) setBucketToDelete(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete bucket “{selectedBucket}”?
+              Delete bucket “{bucketToDelete ?? selectedBucket}”?
             </AlertDialogTitle>
             <AlertDialogDescription>
               Bucket yang masih berisi file/folder atau terhubung ke kredensial

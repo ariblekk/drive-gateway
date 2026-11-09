@@ -5,6 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   IconBrandGoogle,
+  IconChevronDown,
+  IconChevronLeft,
+  IconChevronRight,
+  IconChevronUp,
+  IconChevronsLeft,
+  IconChevronsRight,
   IconDatabase,
   IconDotsVertical,
   IconPlayerPause,
@@ -51,6 +57,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -98,6 +105,9 @@ export function AccountsView() {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [quotaSort, setQuotaSort] = useState<"asc" | "desc">("asc");
+  const [pageSize, setPageSize] = useState(10);
+  const [pageIndex, setPageIndex] = useState(0);
   const { setActions } = useHeader();
 
   const [connectS3Open, setConnectS3Open] = useState(false);
@@ -315,6 +325,19 @@ export function AccountsView() {
     };
   }, [busy, setActions, syncAll]);
 
+  const filteredAccounts = [...(accounts ?? [])].sort((a, b) => {
+    const aPercent = quotaPercent(a.quotaLimit, a.quotaUsage) ?? 0;
+    const bPercent = quotaPercent(b.quotaLimit, b.quotaUsage) ?? 0;
+    return quotaSort === "asc" ? aPercent - bPercent : bPercent - aPercent;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / pageSize));
+  const currentPage = Math.min(pageIndex + 1, totalPages);
+  const pagedAccounts = filteredAccounts.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -348,19 +371,41 @@ export function AccountsView() {
             <p className="text-xs text-muted-foreground">
               No accounts connected yet. Click “Connect account” to add one.
             </p>
+          ) : filteredAccounts.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No accounts match the quota filter.
+            </p>
           ) : (
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-muted">
                 <TableRow>
                   <TableHead>Account</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Quota</TableHead>
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="-ml-2 h-8"
+                      aria-label={`Sort by quota ${quotaSort === "asc" ? "descending" : "ascending"}`}
+                      onClick={() => {
+                        setQuotaSort((sort) => (sort === "asc" ? "desc" : "asc"));
+                        setPageIndex(0);
+                      }}
+                    >
+                      Quota
+                      {quotaSort === "asc" ? (
+                        <IconChevronUp className="size-3.5" />
+                      ) : (
+                        <IconChevronDown className="size-3.5" />
+                      )}
+                    </Button>
+                  </TableHead>
                   <TableHead>Last sync</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {accounts.map((account) => {
+                {pagedAccounts.map((account) => {
                   const percent = quotaPercent(
                     account.quotaLimit,
                     account.quotaUsage,
@@ -496,6 +541,97 @@ export function AccountsView() {
                 })}
               </TableBody>
             </Table>
+          )}
+
+          {filteredAccounts.length > 0 && (
+            <div className="flex items-center justify-between border-t border-border pt-3">
+              <div className="hidden flex-1 text-sm text-muted-foreground lg:flex">
+                {`${Math.min(
+                  (currentPage - 1) * pageSize + 1,
+                  filteredAccounts.length,
+                )}–${Math.min(
+                  currentPage * pageSize,
+                  filteredAccounts.length,
+                )} of ${filteredAccounts.length}`}
+              </div>
+              <div className="flex w-full items-center gap-8 lg:w-fit">
+                <div className="hidden items-center gap-2 lg:flex">
+                  <Label
+                    htmlFor="accounts-rows-per-page"
+                    className="text-sm font-medium"
+                  >
+                    Rows per page
+                  </Label>
+                  <Select
+                    value={`${pageSize}`}
+                    onValueChange={(value) => {
+                      setPageSize(Number(value));
+                      setPageIndex(0);
+                    }}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className="w-20"
+                      id="accounts-rows-per-page"
+                    >
+                      <SelectValue placeholder={pageSize} />
+                    </SelectTrigger>
+                    <SelectContent side="top">
+                      {[10, 20, 30, 40, 50].map((size) => (
+                        <SelectItem key={size} value={`${size}`}>
+                          {size}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex w-fit items-center justify-center text-sm font-medium">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <div className="ml-auto flex items-center gap-2 lg:ml-0">
+                  <Button
+                    variant="outline"
+                    className="hidden size-8 lg:flex"
+                    size="icon"
+                    onClick={() => setPageIndex(0)}
+                    disabled={currentPage === 1}
+                  >
+                    <span className="sr-only">Go to first page</span>
+                    <IconChevronsLeft />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="size-8"
+                    size="icon"
+                    onClick={() => setPageIndex(currentPage - 2)}
+                    disabled={currentPage === 1}
+                  >
+                    <span className="sr-only">Go to previous page</span>
+                    <IconChevronLeft />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="size-8"
+                    size="icon"
+                    onClick={() => setPageIndex(currentPage)}
+                    disabled={currentPage === totalPages}
+                  >
+                    <span className="sr-only">Go to next page</span>
+                    <IconChevronRight />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="hidden size-8 lg:flex"
+                    size="icon"
+                    onClick={() => setPageIndex(totalPages - 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    <span className="sr-only">Go to last page</span>
+                    <IconChevronsRight />
+                  </Button>
+                </div>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

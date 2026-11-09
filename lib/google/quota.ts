@@ -2,53 +2,12 @@ import { eq } from "drizzle-orm";
 
 import { getDb, googleAccounts, type GoogleAccount } from "@/lib/db";
 import { errorMessage } from "@/lib/errors";
-import { syncS3BackendQuota } from "@/lib/storage/s3-backend";
-import { createDriveClient, getAuthorizedClient } from "./client";
+import { syncBackendQuota } from "@/lib/storage/backend";
 
 export async function syncAccountQuota(
   account: GoogleAccount,
 ): Promise<GoogleAccount> {
-  if (account.provider === "s3") {
-    return syncS3BackendQuota(account);
-  }
-
-  const auth = await getAuthorizedClient(account);
-  const drive = createDriveClient(auth);
-  const { data } = await drive.about.get({ fields: "storageQuota" });
-  const quota = data.storageQuota;
-
-  const quotaLimit = quota?.limit ? Number(quota.limit) : null;
-  const quotaUsage = quota?.usage ? Number(quota.usage) : 0;
-  const quotaUsageInDrive = quota?.usageInDrive
-    ? Number(quota.usageInDrive)
-    : 0;
-
-  const now = Date.now();
-  const db = getDb();
-
-  db.update(googleAccounts)
-    .set({
-      quotaLimit,
-      quotaUsage,
-      quotaUsageInDrive,
-      lastQuotaSync: now,
-      status: "active",
-      lastError: null,
-      updatedAt: now,
-    })
-    .where(eq(googleAccounts.id, account.id))
-    .run();
-
-  return {
-    ...account,
-    quotaLimit,
-    quotaUsage,
-    quotaUsageInDrive,
-    lastQuotaSync: now,
-    status: "active",
-    lastError: null,
-    updatedAt: now,
-  };
+  return syncBackendQuota(account);
 }
 
 export async function syncAllQuotas(): Promise<{

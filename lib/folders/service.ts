@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 
 import { and, eq, inArray } from "drizzle-orm";
-import type { OAuth2Client } from "google-auth-library";
 
 import { recordActivity } from "@/lib/activity";
 import {
@@ -13,10 +12,8 @@ import {
   type StoredFile,
 } from "@/lib/db";
 import { errorMessage, GatewayError } from "@/lib/errors";
-import { getAuthorizedClient } from "@/lib/google/client";
-import { removeFile } from "@/lib/google/drive";
 import { adjustTypeUsage } from "@/lib/google/usage";
-import { deleteFromS3Backend } from "@/lib/storage/s3-backend";
+import { deleteFromBackend } from "@/lib/storage/backend";
 
 export function sanitizeFolderName(value: string): string {
   const name = value
@@ -283,7 +280,6 @@ async function deleteDriveFiles(items: StoredFile[]): Promise<void> {
   const db = getDb();
   const accounts = db.select().from(googleAccounts).all();
   const accountMap = new Map(accounts.map((account) => [account.id, account]));
-  const authCache = new Map<string, OAuth2Client>();
 
   for (const file of items) {
     const account = accountMap.get(file.accountId);
@@ -293,18 +289,7 @@ async function deleteDriveFiles(items: StoredFile[]): Promise<void> {
     }
 
     try {
-      if (account.provider === "s3") {
-        await deleteFromS3Backend(account, file.driveFileId);
-      } else {
-        let auth = authCache.get(account.id);
-
-        if (!auth) {
-          auth = await getAuthorizedClient(account);
-          authCache.set(account.id, auth);
-        }
-
-        await removeFile({ auth, driveFileId: file.driveFileId });
-      }
+      await deleteFromBackend(account, file.driveFileId);
     } catch (error) {
       const message = errorMessage(error);
 
