@@ -78,26 +78,6 @@ export async function DELETE(
       );
     }
 
-    const trashedFileStats = db
-      .select({
-        count: sql<number>`count(*)`,
-        size: sql<number>`coalesce(sum(${files.size}), 0)`,
-      })
-      .from(files)
-      .where(and(eq(files.accountId, id), eq(files.status, "trashed")))
-      .get();
-
-    const trashedCount = Number(trashedFileStats?.count ?? 0);
-    const trashedSize = Number(trashedFileStats?.size ?? 0);
-
-    if (trashedCount > 0) {
-      throw new GatewayError(
-        "account_has_trashed_files",
-        `Tidak bisa disconnect: akun ini memiliki ${trashedCount} file di Recycle Bin (${formatBytes(trashedSize)}). Hapus permanen file tersebut terlebih dahulu, atau gunakan fitur Pause.`,
-        409,
-      );
-    }
-
     const account = disconnectGoogleAccount(id);
 
     return json({ account: publicAccount(account) });

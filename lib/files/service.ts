@@ -31,8 +31,6 @@ import {
   downloadFileStream,
   getFileChecksum,
   removeFile,
-  restoreFile,
-  trashFile,
   uploadFromPath,
 } from "@/lib/google/drive";
 import { syncAccountQuota } from "@/lib/google/quota";
@@ -639,118 +637,13 @@ export async function openFileDownload(
   return { file, account, response };
 }
 
-export async function trashFileById(
-  id: string,
-  apiKeyId?: string | null,
-): Promise<StoredFile> {
-  const db = getDb();
-  const file = db.select().from(files).where(eq(files.id, id)).get();
-
-  if (!file || file.status === "trashed") {
-    throw new GatewayError("not_found", "File not found", 404);
-  }
-
-  const account = db
-    .select()
-    .from(googleAccounts)
-    .where(eq(googleAccounts.id, file.accountId))
-    .get();
-
-  if (account && account.status !== "disconnected") {
-    if (account.provider === "google") {
-      const auth = await getAuthorizedClient(account);
-
-      try {
-        await trashFile({ auth, driveFileId: file.driveFileId });
-      } catch (error) {
-        const message = errorMessage(error);
-
-        if (!/not found|404/i.test(message)) {
-          throw error;
-        }
-      }
-    }
-  }
-
-  const now = Date.now();
-
-  db.update(files)
-    .set({ status: "trashed", updatedAt: now })
-    .where(eq(files.id, id))
-    .run();
-
-  adjustTypeUsage(file.accountId, file.mimeType, -file.size, -1);
-
-  recordActivity({
-    action: "trash",
-    fileId: id,
-    accountId: file.accountId,
-    apiKeyId: apiKeyId ?? null,
-    bytes: file.size,
-    status: "ok",
-  });
-
-  return { ...file, status: "trashed", updatedAt: now };
-}
-
-export async function restoreFileById(id: string): Promise<StoredFile> {
-  const db = getDb();
-  const file = getFileById(id, { includeTrashed: true });
-
-  if (file.status !== "trashed") {
-    throw new GatewayError(
-      "not_trashed",
-      "File is not in the trash",
-      409,
-    );
-  }
-
-  const account = db
-    .select()
-    .from(googleAccounts)
-    .where(eq(googleAccounts.id, file.accountId))
-    .get();
-
-  if (account && account.status !== "disconnected") {
-    if (account.provider === "google") {
-      const auth = await getAuthorizedClient(account);
-      await restoreFile({ auth, driveFileId: file.driveFileId });
-    }
-  }
-
-  const now = Date.now();
-
-  db.update(files)
-    .set({ status: "active", updatedAt: now })
-    .where(eq(files.id, id))
-    .run();
-
-  adjustTypeUsage(file.accountId, file.mimeType, file.size, 1);
-
-  recordActivity({
-    action: "restore",
-    fileId: id,
-    accountId: file.accountId,
-    bytes: file.size,
-    status: "ok",
-  });
-
-  return { ...file, status: "active", updatedAt: now };
-}
-
 export async function deleteFilePermanentlyById(
   id: string,
-): Promise<void> {
+  apiKeyId?: string | null,
+  deleteRemote = true,
+): Promise<StoredFile> {
   const db = getDb();
   const file = getFileById(id, { includeTrashed: true });
-
-  if (file.status !== "trashed") {
-    throw new GatewayError(
-      "not_trashed",
-      "Move the file to trash before deleting it permanently",
-      409,
-    );
-  }
 
   const account = db
     .select()
@@ -758,7 +651,7 @@ export async function deleteFilePermanentlyById(
     .where(eq(googleAccounts.id, file.accountId))
     .get();
 
-  if (account && account.status !== "disconnected") {
+  if (deleteRemote && account && account.status !== "disconnected") {
     if (account.provider === "s3") {
       try {
         await deleteFromS3Backend(account, file.driveFileId);
@@ -784,15 +677,22 @@ export async function deleteFilePermanentlyById(
     }
   }
 
+  if (file.status === "active") {
+    adjustTypeUsage(file.accountId, file.mimeType, -file.size, -1);
+  }
+
   db.delete(files).where(eq(files.id, id)).run();
 
   recordActivity({
-    action: "purge",
+    action: "delete",
     fileId: id,
     accountId: file.accountId,
+    apiKeyId: apiKeyId ?? null,
     bytes: file.size,
     status: "ok",
   });
+
+  return file;
 }
 
 export function getGlobalStats() {

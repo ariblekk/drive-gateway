@@ -683,9 +683,8 @@ export function AccountsView() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               Stored files will remain on the remote storage, but this account
-              will no longer be used by the gateway. If there are still active
-              files or files in the Recycle Bin on this account, the gateway
-              will prevent disconnection.
+              will no longer be used by the gateway. Remove or move active files
+              before disconnecting.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     await connection();
     const { searchParams } = new URL(request.url);
     const all = searchParams.get("all") === "1";
-    const status = searchParams.get("status") ?? "active";
+    const status = "active";
     const parentParam = searchParams.get("parentId") ?? "root";
     const parentId = parentParam === "root" ? null : parentParam;
     const bucketParam = searchParams.get("bucketId");

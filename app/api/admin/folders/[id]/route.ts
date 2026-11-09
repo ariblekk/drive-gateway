@@ -3,7 +3,7 @@ import { GatewayError } from "@/lib/errors";
 import {
   moveFolder,
   renameFolder,
-  trashFolder,
+  deleteFolderPermanently,
 } from "@/lib/folders/service";
 
 export async function PATCH(
@@ -62,7 +62,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const result = await trashFolder(id);
+    const result = await deleteFolderPermanently(id);
 
     return json(result);
   } catch (error) {

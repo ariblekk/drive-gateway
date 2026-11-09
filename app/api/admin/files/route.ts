@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const result = listFiles({
       bucketId,
       q: searchParams.get("q") ?? undefined,
-      status: searchParams.get("status") ?? "all",
+      status: "active",
       folderId: searchParams.get("folderId") ?? undefined,
       limit: Number(searchParams.get("limit") ?? 100),
       offset: Number(searchParams.get("offset") ?? 0),

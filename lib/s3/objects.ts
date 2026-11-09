@@ -10,7 +10,6 @@ import {
 import {
   ensureFileEtag,
   getFileByBucketKey,
-  trashFileById,
 } from "@/lib/files/service";
 import { buildFolderPathMap } from "@/lib/folders/service";
 
@@ -268,25 +267,6 @@ export function activeObjectsByKey(
     )
     .orderBy(desc(files.updatedAt))
     .all();
-}
-
-export async function trashObjectsByKey(
-  bucket: string,
-  key: string,
-): Promise<number> {
-  const existing = activeObjectsByKey(bucket, key);
-  let trashed = 0;
-
-  for (const file of existing) {
-    try {
-      await trashFileById(file.id);
-      trashed += 1;
-    } catch {
-      // Best effort. The new object still becomes the active key.
-    }
-  }
-
-  return trashed;
 }
 
 export function parseMetadata(

@@ -55,11 +55,23 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  async rewrites() {
+    return [
+      {
+        source: "/webdav/:path*",
+        destination: "/api/webdav/:path*",
+      },
+      {
+        source: "/webdav",
+        destination: "/api/webdav",
+      },
+    ];
+  },
   async headers() {
     return [
       {
-        // S3 objects receive their own stricter CSP in the route handler.
-        source: "/((?!s3/).*)",
+        // S3 and WebDAV objects receive their own headers in their handlers.
+        source: "/((?!s3/|webdav/|api/webdav/).*)",
         headers: [
           ...securityHeaders,
           {
@@ -74,6 +86,22 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/s3",
+        headers: securityHeaders,
+      },
+      {
+        source: "/webdav/:path*",
+        headers: securityHeaders,
+      },
+      {
+        source: "/webdav",
+        headers: securityHeaders,
+      },
+      {
+        source: "/api/webdav/:path*",
+        headers: securityHeaders,
+      },
+      {
+        source: "/api/webdav",
         headers: securityHeaders,
       },
     ];

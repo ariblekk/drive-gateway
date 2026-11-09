@@ -1,16 +1,17 @@
-import { handleRouteError, json } from "@/lib/api/response";
-import { restoreFileById } from "@/lib/files/service";
-import { publicFile } from "@/lib/serializers";
+import { handleRouteError } from "@/lib/api/response";
+import { GatewayError } from "@/lib/errors";
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id } = await params;
-    const file = await restoreFileById(id);
-
-    return json({ file: publicFile(file) });
+    await params;
+    throw new GatewayError(
+      "not_supported",
+      "Recycle bin is disabled; deletions are permanent",
+      400,
+    );
   } catch (error) {
     return handleRouteError(error);
   }

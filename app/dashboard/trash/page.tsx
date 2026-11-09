@@ -1,5 +1,5 @@
-import { FilesView } from "@/components/gateway/files-view";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <FilesView mode="trashed" />;
+  redirect("/dashboard/files");
 }

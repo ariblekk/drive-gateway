@@ -318,10 +318,17 @@ export function OverviewCards() {
       target: account.id,
       targetHandle,
       animated: isLatest,
+      label: account.status === "paused" ? "Paused" : undefined,
+      labelStyle: { fill: "var(--muted-foreground)", fontSize: 10 },
+      labelBgStyle: { fill: "var(--background)", fillOpacity: 0.9 },
       style: {
-        stroke: isLatest ? "var(--primary)" : "var(--border)",
-        strokeWidth: isLatest ? 2 : 1.25,
-        opacity: isLatest ? 1 : 0.45,
+        stroke: isLatest
+          ? "var(--primary)"
+          : account.status === "paused"
+            ? "transparent"
+            : "var(--border)",
+        strokeWidth: isLatest ? 2.5 : 1.25,
+        opacity: isLatest ? 1 : account.status === "paused" ? 0.3 : 0.6,
       },
     };
   });

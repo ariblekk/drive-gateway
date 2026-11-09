@@ -13,7 +13,6 @@ import {
   IconFolderPlus,
   IconPencil,
   IconPlus,
-  IconRestore,
   IconSearch,
   IconTrash,
   IconUpload,
@@ -103,20 +102,12 @@ type FolderFormState =
   | { type: "move"; folder: FolderItem };
 
 interface FolderActionState {
-  type: "trash" | "restore" | "purge";
   folder: FolderItem;
 }
 
 const PAGE_SIZE = 20;
 
-type FileBulkAction = "trash" | "restore" | "purge";
-
-export function FilesView({
-  mode = "active",
-}: {
-  mode?: "active" | "trashed";
-} = {}) {
-  const isTrash = mode === "trashed";
+export function FilesView() {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [folders, setFolders] = useState<FolderItem[] | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbData[]>([]);
@@ -132,7 +123,6 @@ export function FilesView({
     new Set(),
   );
   const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
-  const [deletePermanently, setDeletePermanently] = useState(false);
   const [folderForm, setFolderForm] = useState<FolderFormState | null>(null);
   const [folderName, setFolderName] = useState("");
   const [folderParent, setFolderParent] = useState("root");
@@ -169,7 +159,7 @@ export function FilesView({
     useState<string>("");
   const [deletingBucket, setDeletingBucket] = useState(false);
   const [deleteBucketOpen, setDeleteBucketOpen] = useState(false);
-  const [purgeSelectedOpen, setPurgeSelectedOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const { openUploadDialog } = useUploadDialog();
   const { setActions, setCount, setCustomTitle } = useHeader();
 
@@ -179,34 +169,23 @@ export function FilesView({
 
   const fetchFolders = useCallback(async () => {
     const bucketParam = `&bucketId=${encodeURIComponent(selectedBucket)}`;
-    if (isTrash) {
-      return apiGet<{
-        folders: FolderItem[];
-        breadcrumbs: BreadcrumbData[];
-      }>(`/api/admin/folders?all=1&status=trashed${bucketParam}`);
-    }
-
     return apiGet<{
       folders: FolderItem[];
       breadcrumbs: BreadcrumbData[];
     }>(
       `/api/admin/folders?parentId=${encodeURIComponent(
         currentFolderId ?? "root",
-      )}&status=active${bucketParam}`,
+      )}${bucketParam}`,
     );
-  }, [currentFolderId, isTrash, selectedBucket]);
+  }, [currentFolderId, selectedBucket]);
 
   const fetchFiles = useCallback(
     (query: string) => {
       const params = new URLSearchParams();
-      params.set("status", mode);
       params.set("limit", String(PAGE_SIZE));
       params.set("offset", String(offset));
       params.set("bucketId", selectedBucket);
-
-      if (!isTrash) {
-        params.set("folderId", currentFolderId ?? "root");
-      }
+      params.set("folderId", currentFolderId ?? "root");
 
       if (query) {
         params.set("q", query);
@@ -216,7 +195,7 @@ export function FilesView({
         `/api/admin/files?${params.toString()}`,
       );
     },
-    [currentFolderId, isTrash, mode, offset, selectedBucket],
+    [currentFolderId, offset, selectedBucket],
   );
 
   const load = useCallback(async () => {
@@ -457,9 +436,7 @@ export function FilesView({
     }
 
     const name = fileToDelete.name;
-    const endpoint = deletePermanently
-      ? `/api/admin/files/${fileToDelete.id}/permanent`
-      : `/api/admin/files/${fileToDelete.id}`;
+    const endpoint = `/api/admin/files/${fileToDelete.id}`;
 
     setBusyId(fileToDelete.id);
     setError(null);
@@ -468,11 +445,7 @@ export function FilesView({
       await apiSend(endpoint, "DELETE");
       await load();
       notifyStorageChanged();
-      toast.success(
-        deletePermanently
-          ? `Permanently deleted ${name}`
-          : `Moved ${name} to trash`,
-      );
+      toast.success(`Deleted ${name}`);
       setFileToDelete(null);
     } catch (cause) {
       toast.error(toMessage(cause));
@@ -481,23 +454,7 @@ export function FilesView({
     }
   };
 
-  const restoreFile = async (file: FileItem) => {
-    setBusyId(file.id);
-    setError(null);
-
-    try {
-      await apiSend(`/api/admin/files/${file.id}/restore`, "POST");
-      await load();
-      notifyStorageChanged();
-      toast.success(`Restored ${file.name}`);
-    } catch (cause) {
-      toast.error(toMessage(cause));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const runBulk = async (action: FileBulkAction) => {
+  const runBulk = async () => {
     const fileIds = Array.from(selectedIds);
     const folderIds = Array.from(selectedFolderIds);
     const count = fileIds.length + folderIds.length;
@@ -506,40 +463,18 @@ export function FilesView({
       return;
     }
 
-    const loadingLabel =
-      action === "trash"
-        ? "Moving"
-        : action === "restore"
-          ? "Restoring"
-          : "Deleting";
-    const toastId = toast.loading(`${loadingLabel} ${count} item(s)…`);
+    const toastId = toast.loading(`Deleting ${count} item(s)…`);
 
     setBusyId("bulk");
 
     try {
-      const fileRequests = fileIds.map((id) => {
-        if (action === "trash") {
-          return apiSend(`/api/admin/files/${id}`, "DELETE");
-        }
+      const fileRequests = fileIds.map((id) =>
+        apiSend(`/api/admin/files/${id}`, "DELETE"),
+      );
 
-        if (action === "restore") {
-          return apiSend(`/api/admin/files/${id}/restore`, "POST");
-        }
-
-        return apiSend(`/api/admin/files/${id}/permanent`, "DELETE");
-      });
-
-      const folderRequests = folderIds.map((id) => {
-        if (action === "trash") {
-          return apiSend(`/api/admin/folders/${id}`, "DELETE");
-        }
-
-        if (action === "restore") {
-          return apiSend(`/api/admin/folders/${id}/restore`, "POST");
-        }
-
-        return apiSend(`/api/admin/folders/${id}/permanent`, "DELETE");
-      });
+      const folderRequests = folderIds.map((id) =>
+        apiSend(`/api/admin/folders/${id}`, "DELETE"),
+      );
 
       const results = await Promise.allSettled([
         ...fileRequests,
@@ -555,14 +490,7 @@ export function FilesView({
       notifyStorageChanged();
 
       if (failed === 0) {
-        toast.success(
-          action === "trash"
-            ? `${succeeded} item(s) moved to trash`
-            : action === "restore"
-              ? `${succeeded} item(s) restored`
-              : `${succeeded} item(s) deleted permanently`,
-          { id: toastId },
-        );
+        toast.success(`${succeeded} item(s) deleted`, { id: toastId });
       } else {
         toast.warning(`${succeeded} succeeded, ${failed} failed`, {
           id: toastId,
@@ -690,11 +618,6 @@ export function FilesView({
   );
 
   useEffect(() => {
-    if (isTrash) {
-      setActions(null);
-      return;
-    }
-
     setActions(
       <ButtonGroup>
         <Button
@@ -719,7 +642,6 @@ export function FilesView({
       setActions(null);
     };
   }, [
-    isTrash,
     currentFolderId,
     selectedBucket,
     openUploadDialog,
@@ -739,21 +661,17 @@ export function FilesView({
   }, [files, total, setCount]);
 
   useEffect(() => {
-    if (!isTrash) {
-      if (currentFolder) {
-        setCustomTitle(currentFolder.name);
-      } else if (selectedBucket !== "default") {
-        setCustomTitle(selectedBucket);
-      } else {
-        setCustomTitle(null);
-      }
+    if (currentFolder) {
+      setCustomTitle(currentFolder.name);
+    } else if (selectedBucket !== "default") {
+      setCustomTitle(selectedBucket);
     } else {
       setCustomTitle(null);
     }
     return () => {
       setCustomTitle(null);
     };
-  }, [isTrash, currentFolder, selectedBucket, setCustomTitle]);
+  }, [currentFolder, selectedBucket, setCustomTitle]);
 
   const submitFolderForm = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -812,20 +730,12 @@ export function FilesView({
       return;
     }
 
-    const { type, folder } = folderAction;
+    const { folder } = folderAction;
     setBusyId(folder.id);
 
     try {
-      if (type === "trash") {
-        await apiSend(`/api/admin/folders/${folder.id}`, "DELETE");
-        toast.success(`Moved ${folder.name} to trash`);
-      } else if (type === "restore") {
-        await apiSend(`/api/admin/folders/${folder.id}/restore`, "POST");
-        toast.success(`Restored ${folder.name}`);
-      } else {
-        await apiSend(`/api/admin/folders/${folder.id}/permanent`, "DELETE");
-        toast.success(`Deleted ${folder.name} permanently`);
-      }
+      await apiSend(`/api/admin/folders/${folder.id}`, "DELETE");
+      toast.success(`Deleted ${folder.name} permanently`);
 
       setSelectedFolderIds((current) => {
         const next = new Set(current);
@@ -855,8 +765,7 @@ export function FilesView({
         selectedCount > 0 ? " pb-24 sm:pb-16" : ""
       }`}
     >
-      {!isTrash && (
-        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-xs">
               <span className="font-medium text-muted-foreground">Bucket:</span>
@@ -936,7 +845,6 @@ export function FilesView({
             </BreadcrumbList>
           </Breadcrumb>
         </div>
-      )}
 
       <Card>
         <CardContent className="flex flex-col gap-3">
@@ -1012,12 +920,7 @@ export function FilesView({
                       <button
                         type="button"
                         className="flex min-w-0 items-center gap-2 text-left hover:underline disabled:cursor-default disabled:no-underline"
-                        onClick={() => {
-                          if (!isTrash) {
-                            navigateTo(folder.id);
-                          }
-                        }}
-                        disabled={isTrash}
+                        onClick={() => navigateTo(folder.id)}
                       >
                         <IconFolder className="size-4 shrink-0 text-muted-foreground" />
                         <span className="truncate font-medium">
@@ -1062,78 +965,33 @@ export function FilesView({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="min-w-48">
-                            {!isTrash && (
-                              <>
-                                <DropdownMenuItem
-                                  onSelect={() =>
-                                    void openFolderForm({
-                                      type: "rename",
-                                      folder,
-                                    })
-                                  }
-                                  disabled={busyId === folder.id}
-                                >
-                                  <IconPencil />
-                                  Rename
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onSelect={() =>
-                                    void openFolderForm({
-                                      type: "move",
-                                      folder,
-                                    })
-                                  }
-                                  disabled={busyId === folder.id}
-                                >
-                                  <IconArrowsMove />
-                                  Move
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onSelect={() =>
-                                    setFolderAction({
-                                      type: "trash",
-                                      folder,
-                                    })
-                                  }
-                                  disabled={busyId === folder.id}
-                                >
-                                  <IconTrash />
-                                  Move to trash
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                            {isTrash && (
-                              <>
-                                <DropdownMenuItem
-                                  onSelect={() =>
-                                    setFolderAction({
-                                      type: "restore",
-                                      folder,
-                                    })
-                                  }
-                                  disabled={busyId === folder.id}
-                                >
-                                  <IconRestore />
-                                  Restore
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onSelect={() =>
-                                    setFolderAction({
-                                      type: "purge",
-                                      folder,
-                                    })
-                                  }
-                                  disabled={busyId === folder.id}
-                                >
-                                  <IconTrash />
-                                  Delete permanently
-                                </DropdownMenuItem>
-                              </>
-                            )}
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                void openFolderForm({ type: "rename", folder })
+                              }
+                              disabled={busyId === folder.id}
+                            >
+                              <IconPencil />
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                void openFolderForm({ type: "move", folder })
+                              }
+                              disabled={busyId === folder.id}
+                            >
+                              <IconArrowsMove />
+                              Move
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => setFolderAction({ folder })}
+                              disabled={busyId === folder.id}
+                            >
+                              <IconTrash />
+                              Delete permanently
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -1187,63 +1045,33 @@ export function FilesView({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="min-w-48">
-                            {!isTrash && (
-                              <>
-                                <DropdownMenuItem asChild>
-                                  <a
-                                    href={`/api/admin/files/${file.id}/download`}
-                                    onClick={() =>
-                                      toast.info(`Downloading ${file.name}`)
-                                    }
-                                  >
-                                    <IconDownload />
-                                    Download
-                                  </a>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onSelect={() => void openMoveSingle(file)}
-                                  disabled={busyId === file.id}
-                                >
-                                  <IconArrowsMove />
-                                  Move to folder
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onSelect={() => {
-                                    setDeletePermanently(false);
-                                    setFileToDelete(file);
-                                  }}
-                                  disabled={busyId === file.id}
-                                >
-                                  <IconTrash />
-                                  Move to trash
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                            {isTrash && (
-                              <>
-                                <DropdownMenuItem
-                                  onSelect={() => void restoreFile(file)}
-                                  disabled={busyId === file.id}
-                                >
-                                  <IconRestore />
-                                  Restore
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onSelect={() => {
-                                    setDeletePermanently(true);
-                                    setFileToDelete(file);
-                                  }}
-                                  disabled={busyId === file.id}
-                                >
-                                  <IconTrash />
-                                  Delete permanently
-                                </DropdownMenuItem>
-                              </>
-                            )}
+                            <DropdownMenuItem asChild>
+                              <a
+                                href={`/api/admin/files/${file.id}/download`}
+                                onClick={() =>
+                                  toast.info(`Downloading ${file.name}`)
+                                }
+                              >
+                                <IconDownload />
+                                Download
+                              </a>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => void openMoveSingle(file)}
+                              disabled={busyId === file.id}
+                            >
+                              <IconArrowsMove />
+                              Move to folder
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => setFileToDelete(file)}
+                              disabled={busyId === file.id}
+                            >
+                              <IconTrash />
+                              Delete permanently
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -1414,19 +1242,9 @@ export function FilesView({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {folderAction?.type === "trash"
-                ? "Move folder to trash?"
-                : folderAction?.type === "restore"
-                  ? "Restore folder?"
-                  : "Delete folder permanently?"}
-            </AlertDialogTitle>
+            <AlertDialogTitle>Delete folder permanently?</AlertDialogTitle>
             <AlertDialogDescription>
-              {folderAction?.type === "trash"
-                ? `"${folderAction.folder.name}" and its contents will be moved to Google Drive trash.`
-                : folderAction?.type === "restore"
-                  ? `"${folderAction.folder.name}" and its contents will be restored.`
-                  : `"${folderAction?.folder.name}" and its contents will be permanently deleted from Google Drive. This cannot be undone.`}
+              {`"${folderAction?.folder.name}" and its contents will be permanently deleted from storage. This cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1434,9 +1252,7 @@ export function FilesView({
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              variant={
-                folderAction?.type === "restore" ? "default" : "destructive"
-              }
+              variant="destructive"
               disabled={busyId === folderAction?.folder.id}
               onClick={(event) => {
                 event.preventDefault();
@@ -1444,12 +1260,8 @@ export function FilesView({
               }}
             >
               {busyId === folderAction?.folder.id
-                ? "Working…"
-                : folderAction?.type === "trash"
-                  ? "Move to trash"
-                  : folderAction?.type === "restore"
-                    ? "Restore"
-                    : "Delete permanently"}
+                ? "Deleting…"
+                : "Delete permanently"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1460,19 +1272,14 @@ export function FilesView({
         onOpenChange={(open) => {
           if (!open) {
             setFileToDelete(null);
-            setDeletePermanently(false);
           }
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {deletePermanently ? "Delete permanently?" : "Move to trash?"}
-            </AlertDialogTitle>
+            <AlertDialogTitle>Delete permanently?</AlertDialogTitle>
             <AlertDialogDescription>
-              {deletePermanently
-                ? `"${fileToDelete?.name}" will be permanently deleted from Google Drive. This action cannot be undone.`
-                : `"${fileToDelete?.name}" will be moved to Google Drive trash. You can restore it later from Recycle Bin.`}
+              {`"${fileToDelete?.name}" will be permanently deleted from storage. This action cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1485,13 +1292,7 @@ export function FilesView({
                 void deleteSelected();
               }}
             >
-              {deleting
-                ? deletePermanently
-                  ? "Deleting…"
-                  : "Moving…"
-                : deletePermanently
-                  ? "Delete permanently"
-                  : "Move to trash"}
+              {deleting ? "Deleting…" : "Delete permanently"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1502,66 +1303,42 @@ export function FilesView({
         busy={busyId === "bulk"}
         onClear={clearSelection}
       >
-        {!isTrash && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void openMoveFiles()}
-              disabled={busyId === "bulk"}
-            >
-              <IconArrowsMove />
-              Move to…
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => void runBulk("trash")}
-              disabled={busyId === "bulk"}
-              aria-label="Move to trash"
-              title="Move to trash"
-            >
-              <IconTrash />
-              <span className="hidden sm:inline">Move to trash</span>
-            </Button>
-          </>
-        )}
-        {isTrash && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void runBulk("restore")}
-              disabled={busyId === "bulk"}
-              aria-label="Restore"
-              title="Restore"
-            >
-              <IconRestore />
-              <span className="hidden sm:inline">Restore</span>
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setPurgeSelectedOpen(true)}
-              disabled={busyId === "bulk"}
-              aria-label="Delete permanently"
-              title="Delete permanently"
-            >
-              <IconTrash />
-              <span className="hidden sm:inline">Delete permanently</span>
-            </Button>
-          </>
-        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void openMoveFiles()}
+          disabled={busyId === "bulk"}
+        >
+          <IconArrowsMove />
+          Move to…
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => setBulkDeleteOpen(true)}
+          disabled={busyId === "bulk"}
+          aria-label="Delete permanently"
+          title="Delete permanently"
+        >
+          <IconTrash />
+          <span className="hidden sm:inline">Delete permanently</span>
+        </Button>
       </BulkBar>
-      <AlertDialog open={purgeSelectedOpen} onOpenChange={setPurgeSelectedOpen}>
+
+      <AlertDialog
+        open={bulkDeleteOpen}
+        onOpenChange={(open) => {
+          if (!open && busyId !== "bulk") {
+            setBulkDeleteOpen(false);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete {selectedCount} item(s) permanently?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Delete {selectedCount} item(s) permanently?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes the selected files and folders. This
-              action cannot be undone.
+              All selected files and folders will be permanently deleted from
+              storage. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1573,11 +1350,10 @@ export function FilesView({
               disabled={busyId === "bulk"}
               onClick={(event) => {
                 event.preventDefault();
-                setPurgeSelectedOpen(false);
-                void runBulk("purge");
+                void runBulk().then(() => setBulkDeleteOpen(false));
               }}
             >
-              Delete permanently
+              {busyId === "bulk" ? "Deleting…" : "Delete permanently"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

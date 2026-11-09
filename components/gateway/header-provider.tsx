@@ -11,7 +11,6 @@ import { usePathname } from "next/navigation";
 const ROUTE_TITLES: Record<string, string> = {
   "/dashboard": "Overview",
   "/dashboard/files": "All Files",
-  "/dashboard/trash": "Recycle Bin",
   "/dashboard/accounts": "Accounts & Quota",
   "/dashboard/activity": "Activity Log",
   "/dashboard/settings": "Settings",

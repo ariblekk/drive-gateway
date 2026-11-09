@@ -1,4 +1,4 @@
-import { handleRouteError, json } from "@/lib/api/response";
+import { handleRouteError } from "@/lib/api/response";
 import { deleteFilePermanentlyById } from "@/lib/files/service";
 
 export async function DELETE(
@@ -9,7 +9,7 @@ export async function DELETE(
     const { id } = await params;
     await deleteFilePermanentlyById(id);
 
-    return json({ ok: true });
+    return new Response(null, { status: 204 });
   } catch (error) {
     return handleRouteError(error);
   }

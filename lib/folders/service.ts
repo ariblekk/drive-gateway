@@ -14,11 +14,7 @@ import {
 } from "@/lib/db";
 import { errorMessage, GatewayError } from "@/lib/errors";
 import { getAuthorizedClient } from "@/lib/google/client";
-import {
-  removeFile,
-  restoreFile,
-  trashFile,
-} from "@/lib/google/drive";
+import { removeFile } from "@/lib/google/drive";
 import { adjustTypeUsage } from "@/lib/google/usage";
 import { deleteFromS3Backend } from "@/lib/storage/s3-backend";
 
@@ -283,10 +279,7 @@ function refreshPathsForTree(rootId: string): void {
   }
 }
 
-async function moveDriveFiles(
-  items: StoredFile[],
-  operation: "trash" | "restore" | "remove",
-): Promise<void> {
+async function deleteDriveFiles(items: StoredFile[]): Promise<void> {
   const db = getDb();
   const accounts = db.select().from(googleAccounts).all();
   const accountMap = new Map(accounts.map((account) => [account.id, account]));
@@ -301,9 +294,7 @@ async function moveDriveFiles(
 
     try {
       if (account.provider === "s3") {
-        if (operation === "remove") {
-          await deleteFromS3Backend(account, file.driveFileId);
-        }
+        await deleteFromS3Backend(account, file.driveFileId);
       } else {
         let auth = authCache.get(account.id);
 
@@ -312,26 +303,21 @@ async function moveDriveFiles(
           authCache.set(account.id, auth);
         }
 
-        if (operation === "trash") {
-          await trashFile({ auth, driveFileId: file.driveFileId });
-        } else if (operation === "restore") {
-          await restoreFile({ auth, driveFileId: file.driveFileId });
-        } else {
-          await removeFile({ auth, driveFileId: file.driveFileId });
-        }
+        await removeFile({ auth, driveFileId: file.driveFileId });
       }
     } catch (error) {
       const message = errorMessage(error);
 
       if (!/not found|404/i.test(message)) {
         recordActivity({
-          action: `folder_${operation}_error`,
+          action: "folder_delete_error",
           fileId: file.id,
           accountId: file.accountId,
           bytes: file.size,
           status: "error",
           message: message.slice(0, 500),
         });
+        throw error;
       }
     }
   }
@@ -506,159 +492,11 @@ export function moveFilesToFolder(
   return result.changes;
 }
 
-export async function trashFolder(
-  id: string,
-): Promise<{ folders: number; files: number }> {
-  const db = getDb();
-  const folder = getFolderById(id);
-
-  if (folder.status !== "active") {
-    throw new GatewayError("bad_request", "Folder is not active", 400);
-  }
-
-  const all = getAllFolders();
-  const subtree = collectSubtree(all, id);
-  const folderIds = Array.from(subtree);
-  const filesToTrash = db
-    .select()
-    .from(files)
-    .all()
-    .filter(
-      (file) =>
-        file.folderId &&
-        subtree.has(file.folderId) &&
-        file.status === "active",
-    );
-
-  await moveDriveFiles(filesToTrash, "trash");
-
-  const now = Date.now();
-  const totalBytes = filesToTrash.reduce(
-    (sum, file) => sum + file.size,
-    0,
-  );
-
-  if (filesToTrash.length > 0) {
-    db.update(files)
-      .set({ status: "trashed", updatedAt: now })
-      .where(
-        inArray(
-          files.id,
-          filesToTrash.map((file) => file.id),
-        ),
-      )
-      .run();
-
-    for (const file of filesToTrash) {
-      adjustTypeUsage(
-        file.accountId,
-        file.mimeType,
-        -file.size,
-        -1,
-      );
-    }
-  }
-
-  db.update(folders)
-    .set({ status: "trashed", updatedAt: now })
-    .where(inArray(folders.id, folderIds))
-    .run();
-
-  recordActivity({
-    action: "folder_trash",
-    bytes: totalBytes,
-    status: "ok",
-    message: folder.name,
-  });
-
-  return { folders: folderIds.length, files: filesToTrash.length };
-}
-
-export async function restoreFolder(
-  id: string,
-): Promise<{ folders: number; files: number }> {
-  const db = getDb();
-  const folder = getFolderById(id);
-
-  if (folder.status !== "trashed") {
-    throw new GatewayError(
-      "bad_request",
-      "Folder is not in the trash",
-      400,
-    );
-  }
-
-  const all = getAllFolders();
-  const subtree = collectSubtree(all, id);
-  const folderIds = Array.from(subtree);
-  const filesToRestore = db
-    .select()
-    .from(files)
-    .all()
-    .filter(
-      (file) =>
-        file.folderId &&
-        subtree.has(file.folderId) &&
-        file.status === "trashed",
-    );
-
-  await moveDriveFiles(filesToRestore, "restore");
-
-  const now = Date.now();
-  const totalBytes = filesToRestore.reduce(
-    (sum, file) => sum + file.size,
-    0,
-  );
-
-  if (filesToRestore.length > 0) {
-    db.update(files)
-      .set({ status: "active", updatedAt: now })
-      .where(
-        inArray(
-          files.id,
-          filesToRestore.map((file) => file.id),
-        ),
-      )
-      .run();
-
-    for (const file of filesToRestore) {
-      adjustTypeUsage(
-        file.accountId,
-        file.mimeType,
-        file.size,
-        1,
-      );
-    }
-  }
-
-  db.update(folders)
-    .set({ status: "active", updatedAt: now })
-    .where(inArray(folders.id, folderIds))
-    .run();
-
-  recordActivity({
-    action: "folder_restore",
-    bytes: totalBytes,
-    status: "ok",
-    message: folder.name,
-  });
-
-  return { folders: folderIds.length, files: filesToRestore.length };
-}
-
 export async function deleteFolderPermanently(
   id: string,
-): Promise<void> {
+): Promise<{ folders: number; files: number }> {
   const db = getDb();
   const folder = getFolderById(id);
-
-  if (folder.status !== "trashed") {
-    throw new GatewayError(
-      "bad_request",
-      "Move the folder to trash first",
-      400,
-    );
-  }
 
   const all = getAllFolders();
   const subtree = collectSubtree(all, id);
@@ -669,7 +507,7 @@ export async function deleteFolderPermanently(
     .all()
     .filter((file) => file.folderId && subtree.has(file.folderId));
 
-  await moveDriveFiles(filesToDelete, "remove");
+  await deleteDriveFiles(filesToDelete);
 
   for (const file of filesToDelete) {
     if (file.status === "active") {
@@ -701,13 +539,19 @@ export async function deleteFolderPermanently(
     db.delete(folders).where(eq(folders.id, folderId)).run();
   }
 
+  const totalBytes = filesToDelete.reduce(
+    (sum, file) => sum + file.size,
+    0,
+  );
+
   recordActivity({
-    action: "folder_purge",
-    bytes: filesToDelete.reduce(
-      (sum, file) => sum + file.size,
-      0,
-    ),
+    action: "folder_delete",
+    bytes: totalBytes,
     status: "ok",
     message: folder.name,
   });
+
+  return { folders: folderIds.length, files: filesToDelete.length };
 }
+
+

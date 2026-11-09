@@ -49,14 +49,14 @@ import {
 } from "@/lib/s3/xml";
 import {
   createFolder,
+  deleteFolderPermanently,
   sanitizeFolderName,
-  trashFolder,
 } from "@/lib/folders/service";
 import {
+  deleteFilePermanentlyById,
   openFileDownload,
   sanitizeFileName,
   saveUpload,
-  trashFileById,
 } from "@/lib/files/service";
 
 type RouteContext = {
@@ -508,11 +508,7 @@ async function handlePutObject(
   });
 
   for (const oldFile of previous) {
-    try {
-      await trashFileById(oldFile.id);
-    } catch {
-      // Best effort. The new object is already the active key.
-    }
+    await deleteFilePermanentlyById(oldFile.id, null, false);
   }
 
   const etag = stored.etag ?? stored.id;
@@ -540,7 +536,7 @@ async function handleDeleteObject(
     const folder = findFolderByKey(bucketName, key);
 
     if (folder) {
-      await trashFolder(folder.id);
+      await deleteFolderPermanently(folder.id);
 
       return new Response(null, {
         status: 204,
@@ -555,7 +551,7 @@ async function handleDeleteObject(
     const folder = findFolderByKey(bucketName, key);
 
     if (folder) {
-      await trashFolder(folder.id);
+      await deleteFolderPermanently(folder.id);
     }
 
     return new Response(null, {
@@ -564,7 +560,7 @@ async function handleDeleteObject(
     });
   }
 
-  await trashFileById(file.id);
+  await deleteFilePermanentlyById(file.id);
 
   return new Response(null, {
     status: 204,

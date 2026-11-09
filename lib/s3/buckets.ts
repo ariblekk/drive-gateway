@@ -139,18 +139,18 @@ export function deleteBucket(name: string): void {
   const bucketContent = db
     .select({ id: files.id })
     .from(files)
-    .where(eq(files.bucketId, bucket.id))
+    .where(eq(files.bucketId, bucket.name))
     .get();
   const bucketFolders = db
     .select({ id: folders.id })
     .from(folders)
-    .where(eq(folders.bucketId, bucket.id))
+    .where(eq(folders.bucketId, bucket.name))
     .get();
 
   if (bucketContent || bucketFolders) {
     throw new S3Error(
       "BucketNotEmpty",
-      "Empty the bucket, including its trash and folders, before deleting it",
+      "Empty the bucket, including its folders, before deleting it",
       409,
     );
   }

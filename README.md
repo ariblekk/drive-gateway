@@ -10,12 +10,13 @@ Uploads are routed automatically to the connected storage account with the **mos
 - Connect external **S3 storage backends** (Cloudflare R2, MinIO, Wasabi, Backblaze B2, AWS S3) with customizable quota limits.
 - Automatic account selection across all providers based on remaining quota (`quota` or `round_robin`).
 - S3-compatible API endpoint (`/s3`) with AWS Signature V4 authentication, bucket isolation, and storage limits.
-- Admin dashboard: overview with bandwidth charts, accounts & quota, file manager with bucket selector, recycle bin, API keys & S3 credentials, activity log.
-- File manager: folders, breadcrumb navigation, search, pagination, checkbox bulk actions (files and folders), rename, move, trash, restore, and permanent delete.
+- WebDAV endpoint (`/webdav`) with RFC 4918 support for Windows Explorer network drive mapping, macOS Finder, Cyberduck, and Rclone.
+- Admin dashboard: overview with bandwidth charts, accounts & quota, file manager with bucket selector, API keys & S3 credentials, activity log.
+- File manager: folders, breadcrumb navigation, search, pagination, checkbox bulk actions (files and folders), rename, move, and permanent delete.
 - Upload dialog with drag & drop, multiple files, per-file progress, bucket selection, and folder destination.
 - Server-side upload limit from `MAX_UPLOAD_BYTES`; the limit is shown in the UI.
 - Public REST API: upload, list, metadata, download with `Range`, delete, and stats.
-- Recycle bin backed by Google Drive trash and virtual trash for S3 backends.
+- Deletes remove files and folders immediately from their storage provider; there is no application recycle bin. Existing trashed Google Drive records from earlier versions remain visible only in provider storage and are not automatically purged during upgrade.
 - Sidebar storage breakdown: photos, videos, documents, free space, and used space.
 - Sonner toasts, confirmation dialogs, and responsive header actions (icon-only on mobile).
 - SQLite + Drizzle ORM, Docker support with a persistent volume.
@@ -118,11 +119,13 @@ docker compose logs -f gateway
 
 ## Usage
 
+> **Permanent deletion:** This app has no recycle bin. Delete operations remove objects from the backing provider immediately and cannot be undone. Google Drive may retain its own provider-side recovery window; S3/R2 behavior follows that provider's configuration.
+
 1. Log in at `/login`.
 2. Go to `/dashboard/accounts` and click **Connect account**. Repeat for each Google account.
 3. Upload from `/dashboard/files` or the sidebar. Files are routed by available quota.
 4. Manage folders and files with checkboxes, bulk actions, or the 3-dot row menu.
-5. Deleted items go to `/dashboard/trash`, where they can be restored or permanently deleted.
+5. Deleting a file or folder removes it permanently from the storage provider; verify before confirming because it cannot be restored from this app.
 6. Create API keys at `/dashboard/api-keys`. A key is shown only once.
 
 ## API
@@ -172,7 +175,7 @@ When creating S3 credentials in the dashboard, you can configure:
 - `PutObject` (single request up to `S3_MAX_PUT_BYTES`, ETag MD5, metadata)
 - `GetObject` (streaming, Range requests)
 - `HeadObject` (metadata, ETag, Content-Type)
-- `DeleteObject` (moves file to Google Drive trash)
+- `DeleteObject` (permanently deletes the object from the backing storage)
 
 ### S3 Client Examples
 
@@ -227,6 +230,42 @@ aws --endpoint-url $ENDPOINT s3api delete-object \
   --bucket default --key photos/sunset.jpg
 ```
 
+### WebDAV
+
+Connect to `https://your-domain/webdav` in production (or `http://localhost:3000/webdav` locally).
+
+Supports HTTP Basic Authentication with:
+- **Admin credentials**: `ADMIN_EMAIL` as username and `ADMIN_PASSWORD` as password.
+- **S3 credentials**: `accessKeyId` (`s3_...`) as username and `secretAccessKey` as password (supports bucket-level isolation and read-only permissions).
+- **API Keys**: `api` as username and `gwk_live_...` as password.
+
+#### Client Setup Examples
+- **Windows File Explorer**:
+  - Right-click *This PC* → *Map network drive...*
+  - Folder: `https://your-domain/webdav` (or `http://localhost:3000/webdav`)
+  - *Note for plain HTTP*: Windows requires HTTPS for Basic Auth by default. To allow plain HTTP on LAN/localhost, set registry `HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters\BasicAuthLevel` to `2`.
+- **Windows PowerShell (`net use`)**:
+  ```powershell
+  # Map drive
+  net use Z: "https://your-domain/webdav" /user:admin@localhost changeme
+
+  # Disconnect drive
+  net use Z: /delete /y
+  ```
+- **macOS Finder**:
+  - *Finder* → *Go* → *Connect to Server...* (`Cmd + K`)
+  - Server Address: `https://your-domain/webdav` (or `http://localhost:3000/webdav` locally)
+- **Rclone**:
+  ```ini
+  [drive-gateway-dav]
+  type = webdav
+  url = https://your-domain/webdav
+  vendor = other
+  user = admin@example.com
+  pass = ...
+  ```
+- **Web Browser**: Visit `https://your-domain/webdav` directly to browse buckets and folders (locally: `http://localhost:3000/webdav`).
+
 ## Notes & Limitations
 
 - **Folders are virtual** — stored as SQLite metadata, not physical folders in Google Drive.
@@ -259,11 +298,11 @@ aws --endpoint-url $ENDPOINT s3api delete-object \
 
 ```text
 app/api/            auth, public v1, admin, and upload routes
-app/dashboard/      admin pages (overview, accounts, files, trash, activity, api-keys)
+app/dashboard/      admin pages (overview, accounts, files, activity, api-keys)
 components/gateway/ admin UI components
 components/ui/      shadcn/ui components
 lib/db/             Drizzle schema, connection, migrations
-lib/files/          file services (upload, list, trash, storage summary)
+lib/files/          file services (upload, list, delete, storage summary)
 lib/folders/        virtual folder services
 lib/google/         OAuth, Drive client, quota, account selection
 data/               SQLite database and temp uploads (gitignored)

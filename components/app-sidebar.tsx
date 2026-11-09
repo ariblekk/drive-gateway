@@ -7,7 +7,6 @@ import {
   IconCloud,
   IconFileStack,
   IconHistory,
-  IconTrash,
 } from "@tabler/icons-react";
 
 import { SidebarStorage } from "@/components/gateway/sidebar-storage";
@@ -39,11 +38,6 @@ const data = {
       title: "All Files",
       url: "/dashboard/files",
       icon: IconFileStack,
-    },
-    {
-      title: "Recycle Bin",
-      url: "/dashboard/trash",
-      icon: IconTrash,
     },
     {
       title: "Accounts & Quota",

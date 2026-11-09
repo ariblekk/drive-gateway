@@ -202,8 +202,8 @@ export const openApiSpec = {
       },
       delete: {
         tags: ["Public REST API (v1)"],
-        summary: "Move file to Recycle Bin",
-        description: "Soft deletes the file into the gateway Recycle Bin (Google Drive trash).",
+        summary: "Permanently delete file",
+        description: "Permanently deletes the file from the gateway and its storage provider.",
         security: [{ ApiKeyAuth: [] }, { XApiKeyAuth: [] }],
         parameters: [
           {
@@ -215,7 +215,7 @@ export const openApiSpec = {
         ],
         responses: {
           "200": {
-            description: "File moved to trash",
+            description: "File deleted permanently",
             content: {
               "application/json": {
                 schema: {
@@ -458,7 +458,7 @@ export const openApiSpec = {
       delete: {
         tags: ["S3 Compatible API (/s3)"],
         summary: "DeleteObject",
-        description: "Deletes an object or folder (moves to trash). Idempotent (returns 204 even if key does not exist).",
+        description: "Permanently deletes an object or folder. Idempotent (returns 204 even if key does not exist).",
         security: [{ AwsSigV4: [] }],
         parameters: [
           { name: "bucket", in: "path", required: true, schema: { type: "string" } },
@@ -504,7 +504,7 @@ export const openApiSpec = {
           path: { type: "string" },
           bucketId: { type: "string" },
           key: { type: "string" },
-          status: { type: "string", enum: ["active", "trashed"] },
+          status: { type: "string", enum: ["active"] },
           createdAt: { type: "integer" },
           updatedAt: { type: "integer" },
         },

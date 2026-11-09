@@ -1,5 +1,5 @@
 import { handleRouteError, json } from "@/lib/api/response";
-import { trashFileById } from "@/lib/files/service";
+import { deleteFilePermanentlyById } from "@/lib/files/service";
 import { publicFile } from "@/lib/serializers";
 
 export async function DELETE(
@@ -8,7 +8,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const file = await trashFileById(id, null);
+    const file = await deleteFilePermanentlyById(id, null);
 
     return json({ file: publicFile(file) });
   } catch (error) {

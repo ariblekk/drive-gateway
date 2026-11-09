@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Permanent Deletion (No Recycle Bin)**:
+  - Dashboard, WebDAV, public REST API, and S3 `DeleteObject` now permanently delete files/folders from the backing provider.
+  - Removed the Recycle Bin navigation; the legacy `/dashboard/trash` URL redirects to All Files.
+  - Updated API documentation and README to warn that deletion cannot be undone.
 - **Interactive Storage Topology (React Flow)**:
   - Visual diagram on Overview representing the central project hub connected to storage providers (Google Drive and S3).
   - 4-cardinal directional handles (`top`, `right`, `bottom`, `left`) with smooth bezier curves.
@@ -20,6 +24,15 @@ All notable changes to this project will be documented in this file.
 - **Target Account in Recent Activity**:
   - Added `Target` column in the Recent Activity table on the Overview dashboard displaying the target account email (`accountEmail`).
   - Extended `/api/admin/overview` response to map `accountId` to account email for activity log entries.
+- **WebDAV Endpoint (`/webdav`)**:
+  - Full RFC 4918 WebDAV server implementation supporting `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE`, `MKCOL`, `MOVE`, `COPY`, `LOCK`, `UNLOCK`, and `PROPPATCH`.
+  - Next.js Pages API routing bypass (`pages/api/webdav/[[...path]].ts` rewritten from `/webdav`) to support non-standard WebDAV HTTP methods prohibited by App Router.
+  - Streaming upload handler with disabled Next.js body parser (`bodyParser: false`) for raw payload transfers.
+  - Multi-credential HTTP Basic Auth: Admin credentials (`ADMIN_EMAIL`/`ADMIN_PASSWORD`), S3 Access/Secret keys (with bucket-level isolation and read-only enforcement), and API Keys (`gwk_live_...`).
+  - Native file explorer integration for Windows Explorer (Map Network Drive & PowerShell `net use`), macOS Finder, Cyberduck, and Rclone.
+  - HTML directory browser view for standard web browsers.
+  - Assert-based WebDAV test suite (`scripts/test-webdav.mjs`).
+- S3 object overwrites now permanently remove the previous object instead of retaining it in an application recycle bin.
 
 ### Changed
 
