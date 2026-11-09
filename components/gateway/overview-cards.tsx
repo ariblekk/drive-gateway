@@ -52,7 +52,7 @@ import type { OverviewResponse } from "./types";
 
 function ProjectNode({ data }: { data: { label: string; sublabel: string } }) {
   return (
-    <div className="relative flex flex-col items-center justify-center rounded-xl border border-primary/50 bg-primary/10 px-4 py-2 text-center shadow-xs">
+    <div className="relative flex flex-col items-center justify-center border border-primary/50 bg-primary/10 px-4 py-2 text-center shadow-xs">
       <Handle
         type="source"
         position={Position.Top}
@@ -96,7 +96,7 @@ function AccountNode({
   return (
     <div
       className={cn(
-        "flex w-44 items-center gap-2.5 rounded-lg border bg-card px-3 py-2 shadow-xs transition-all",
+        "flex w-44 items-center gap-2.5 border bg-card px-3 py-2 shadow-xs transition-all",
         data.isLatest
           ? "border-primary ring-2 ring-primary/20 shadow-primary/10 shadow-md"
           : "border-border",
@@ -127,7 +127,7 @@ function AccountNode({
         className="!size-0 !border-0 !bg-transparent"
       />
 
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted">
+      <span className="flex size-7 shrink-0 items-center justify-center bg-muted">
         {data.provider === "s3" ? (
           <IconDatabase className="size-4 text-blue-500" />
         ) : (
@@ -137,12 +137,6 @@ function AccountNode({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-xs font-medium">{data.name}</span>
-          {data.isLatest && (
-            <span className="relative flex size-2 shrink-0">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
-              <span className="relative inline-flex size-2 rounded-full bg-primary" />
-            </span>
-          )}
         </div>
         <div className="truncate text-[10px] text-muted-foreground">
           {data.subtext}
@@ -317,18 +311,17 @@ export function OverviewCards() {
       sourceHandle,
       target: account.id,
       targetHandle,
-      animated: isLatest,
-      label: account.status === "paused" ? "Paused" : undefined,
-      labelStyle: { fill: "var(--muted-foreground)", fontSize: 10 },
-      labelBgStyle: { fill: "var(--background)", fillOpacity: 0.9 },
+      animated: false,
       style: {
-        stroke: isLatest
-          ? "var(--primary)"
-          : account.status === "paused"
-            ? "transparent"
-            : "var(--border)",
-        strokeWidth: isLatest ? 2.5 : 1.25,
-        opacity: isLatest ? 1 : account.status === "paused" ? 0.3 : 0.6,
+        stroke:
+          account.status === "paused"
+            ? "var(--muted-foreground)"
+            : isLatest
+              ? "var(--primary)"
+              : "var(--border)",
+        strokeDasharray: account.status === "paused" ? "5 5" : "none",
+        strokeWidth: isLatest && account.status !== "paused" ? 2.5 : 1.25,
+        opacity: account.status === "paused" ? 0.6 : isLatest ? 1 : 0.6,
       },
     };
   });
@@ -359,7 +352,7 @@ export function OverviewCards() {
           <CardHeader>
             <CardTitle>Storage per account</CardTitle>
             <CardDescription>
-              Live storage topology and last upload target.
+              Storage account connections and most recent upload target.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -368,27 +361,46 @@ export function OverviewCards() {
                 No storage accounts connected yet.
               </p>
             ) : (
-              <div className="h-72 w-full overflow-hidden border bg-muted/10 sm:h-96">
-                <ReactFlow
-                  nodes={topologyNodes}
-                  edges={topologyEdges}
-                  nodeTypes={nodeTypes}
-                  fitView
-                  fitViewOptions={{ padding: 0.2 }}
-                  minZoom={0.4}
-                  maxZoom={2}
-                  zoomOnScroll
-                  zoomActivationKeyCode="Control"
-                  zoomOnPinch
-                  panOnDrag
-                  elementsSelectable={false}
-                  nodesDraggable={false}
-                  nodesConnectable={false}
-                  proOptions={{ hideAttribution: true }}
-                >
-                  <Background color="var(--border)" gap={20} size={1} />
-                  <Controls showInteractive={false} />
-                </ReactFlow>
+              <div>
+                <div className="h-72 w-full overflow-hidden border bg-muted/10 sm:h-96">
+                  <ReactFlow
+                    nodes={topologyNodes}
+                    edges={topologyEdges}
+                    nodeTypes={nodeTypes}
+                    fitView
+                    fitViewOptions={{ padding: 0.2 }}
+                    minZoom={0.4}
+                    maxZoom={2}
+                    zoomOnScroll
+                    zoomActivationKeyCode="Control"
+                    zoomOnPinch
+                    panOnDrag
+                    elementsSelectable={false}
+                    nodesDraggable={false}
+                    nodesConnectable={false}
+                    proOptions={{ hideAttribution: true }}
+                  >
+                    <Background color="var(--border)" gap={20} size={1} />
+                    <Controls showInteractive={false} />
+                  </ReactFlow>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-2">
+                    <span aria-hidden="true" className="h-px w-5 bg-border" />
+                    Connected
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className="w-5 border-t border-dashed border-muted-foreground"
+                    />
+                    Paused
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span aria-hidden="true" className="h-0.5 w-5 bg-primary" />
+                    Last used
+                  </span>
+                </div>
               </div>
             )}
           </CardContent>

@@ -73,7 +73,7 @@ export async function DELETE(
     if (activeCount > 0) {
       throw new GatewayError(
         "account_has_files",
-        `Tidak bisa disconnect: akun ini masih menyimpan ${activeCount} file aktif (${formatBytes(activeSize)}). Hapus atau pindahkan file terlebih dahulu, atau gunakan fitur Pause.`,
+        `Cannot disconnect: this account still stores ${activeCount} active file(s) (${formatBytes(activeSize)}). Delete or move the files first, or pause the account instead.`,
         409,
       );
     }

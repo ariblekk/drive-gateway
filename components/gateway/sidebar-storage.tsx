@@ -3,17 +3,9 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
-import {
-  IconFileText,
-  IconPhoto,
-  IconVideo,
-} from "@tabler/icons-react";
 
 import { Progress } from "@/components/ui/progress";
-import {
-  SidebarGroup,
-  SidebarGroupContent,
-} from "@/components/ui/sidebar";
+import { SidebarGroup, SidebarGroupContent } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { apiGet, STORAGE_CHANGED_EVENT } from "./client";
@@ -21,14 +13,10 @@ import { formatBytes, quotaPercent } from "./format";
 import type { StorageSummary } from "./types";
 
 const ROWS = [
-  { key: "photos", label: "Photo", icon: IconPhoto, color: "text-green-500" },
-  { key: "videos", label: "Video", icon: IconVideo, color: "text-yellow-500" },
-  {
-    key: "documents",
-    label: "Document",
-    icon: IconFileText,
-    color: "text-cyan-500",
-  },
+  { key: "photos", label: "Photo", color: "bg-green-500" },
+  { key: "videos", label: "Video", color: "bg-yellow-500" },
+  { key: "documents", label: "Document", color: "bg-cyan-500" },
+  { key: "other", label: "Other", color: "bg-muted-foreground" },
 ] as const;
 
 export function SidebarStorage() {
@@ -76,9 +64,10 @@ export function SidebarStorage() {
                     className="flex items-center justify-between gap-3"
                   >
                     <span className="flex items-center gap-2">
-                      <span className="flex size-4 shrink-0 items-center justify-center">
-                        <row.icon className={cn("size-4", row.color)} />
-                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={cn("size-2 shrink-0 rounded-none", row.color)}
+                      />
                       <span>{row.label}</span>
                     </span>
                     <span className="shrink-0 tabular-nums text-foreground">
@@ -86,7 +75,6 @@ export function SidebarStorage() {
                     </span>
                   </div>
                 ))}
-
               </div>
 
               <div className="flex flex-col gap-1.5">
