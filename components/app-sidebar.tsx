@@ -67,7 +67,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <Link href="/dashboard">
                 <IconCloudComputing className="size-5!" />
                 <span className="text-base font-semibold group-data-[collapsible=icon]:hidden">
-                  Drive Gateway
+                  Omnibucket
                 </span>
                 <span className="text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
                   v{packageJson.version}

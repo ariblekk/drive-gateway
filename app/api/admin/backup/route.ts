@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
     const backup = createBackup();
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `drive-gateway-credentials-${timestamp}.json`;
+    const filename = `omnibucket-credentials-${timestamp}.json`;
 
     return json(backup, {
       headers: {

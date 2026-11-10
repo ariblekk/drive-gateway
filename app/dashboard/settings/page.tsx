@@ -59,7 +59,7 @@ export default function Page() {
       link.download =
         response.headers
           .get("Content-Disposition")
-          ?.match(/filename="?([^";]+)"?/i)?.[1] ?? "drive-gateway-backup.json";
+          ?.match(/filename="?([^";]+)"?/i)?.[1] ?? "omnibucket-backup.json";
       link.click();
       URL.revokeObjectURL(url);
       toast.success("Database backup downloaded.");

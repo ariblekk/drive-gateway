@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: drive-gateway
+    container_name: omnibucket
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -18,4 +18,4 @@ services:
 
 volumes:
   gateway_data:
-    name: drive_gateway_data
+    name: omnibucket_data

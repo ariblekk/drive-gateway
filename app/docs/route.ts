@@ -4,7 +4,7 @@ export async function GET() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-  <title>Drive Gateway - Swagger API Documentation</title>
+  <title>Omnibucket - Swagger API Documentation</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
   <style>
     *, *:before, *:after {
@@ -252,7 +252,7 @@ export async function GET() {
         <path d="M16 16v4a1 1 0 0 0 1 1h4" />
         <path d="M8 16v4a1 1 0 0 1 -1 1h-4" />
       </svg>
-      <span>Drive Gateway API</span>
+      <span>Omnibucket API</span>
     </a>
     <div class="topbar-links">
       <a href="/dashboard">← Dashboard</a>

@@ -1,7 +1,7 @@
 services:
   gateway:
-    image: ariblekk/drive-gateway:latest
-    container_name: drive-gateway
+    image: ariblekk/omnibucket:latest
+    container_name: omnibucket
     restart: unless-stopped
     pull_policy: always
     ports:
@@ -22,4 +22,4 @@ services:
 
 volumes:
   gateway_data:
-    name: drive_gateway_data
+    name: omnibucket_data

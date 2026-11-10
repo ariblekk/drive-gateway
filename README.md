@@ -1,4 +1,4 @@
-# Drive Gateway
+# Omnibucket
 
 A multi-provider **storage gateway** (Google Drive & S3 backends) with an admin dashboard and an S3-compatible REST API.
 
@@ -121,7 +121,7 @@ docker compose logs -f gateway
 ```
 
 - Port: `3000`
-- Volume: `drive_gateway_data` mounted at `/data`
+- Volume: `omnibucket_data` mounted at `/data`
 - Database migrations run automatically on container start. The container fixes `/data` ownership before migrations, then runs the app as the unprivileged `gateway` user.
 - `docker compose down` keeps the volume. Do **not** use `docker compose down -v` unless you want to delete the data.
 
@@ -136,7 +136,7 @@ docker compose logs -f gateway
 5. Deleting a file or folder removes it permanently from the storage provider; verify before confirming because it cannot be restored from this app.
 ## S3-Compatible API
 
-Drive Gateway provides an S3-compatible API at `/s3`. It supports standard AWS Signature V4 authentication using access key ID and secret access key.
+Omnibucket provides an S3-compatible API at `/s3`. It supports standard AWS Signature V4 authentication using access key ID and secret access key.
 
 ### Configuration for S3 Clients
 
@@ -244,7 +244,7 @@ Supports HTTP Basic Authentication with:
   - Server Address: `https://your-domain/webdav` (or `http://localhost:3000/webdav` locally)
 - **Rclone**:
   ```ini
-  [drive-gateway-dav]
+  [omnibucket-dav]
   type = webdav
   url = https://your-domain/webdav
   vendor = other

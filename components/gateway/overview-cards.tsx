@@ -250,7 +250,7 @@ export function OverviewCards() {
       type: "project",
       position: { x: -80, y: -28 },
       data: {
-        label: "Drive Gateway",
+        label: "Omnibucket",
         sublabel: `${formatBytes(stats.totalFileBytes)} stored`,
       },
     },

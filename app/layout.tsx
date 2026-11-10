@@ -25,22 +25,22 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.APP_URL || "http://localhost:3000"),
   title: {
-    default: "Drive Gateway",
-    template: "%s | Drive Gateway",
+    default: "Omnibucket",
+    template: "%s | Omnibucket",
   },
   description:
     "Manage Google Drive and S3 storage from one dashboard, with an S3-compatible API and automatic storage routing.",
-  applicationName: "Drive Gateway",
+  applicationName: "Omnibucket",
   openGraph: {
     type: "website",
-    siteName: "Drive Gateway",
-    title: "Drive Gateway",
+    siteName: "Omnibucket",
+    title: "Omnibucket",
     description:
       "Manage Google Drive and S3 storage from one dashboard, with an S3-compatible API and automatic storage routing.",
   },
   twitter: {
     card: "summary",
-    title: "Drive Gateway",
+    title: "Omnibucket",
     description:
       "Manage Google Drive and S3 storage from one dashboard, with an S3-compatible API and automatic storage routing.",
   },

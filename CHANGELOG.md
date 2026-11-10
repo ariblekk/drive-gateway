@@ -45,6 +45,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Renamed to Omnibucket**: product name, page metadata, WebDAV realm/title, OpenAPI title, docs page, sidebar brand, overview label, package name (`omnibucket`), Docker image (`ariblekk/omnibucket`), container name (`omnibucket`), and volume (`omnibucket_data`). Backup format identifiers (`drive-gateway-backup`, `drive-gateway-credentials`) are unchanged so existing backups still restore.
+
 - **S3 Credential Bucket Scope**: removed the `All (*)` option; every credential must target a single existing bucket (enforced in UI, API, service, and schema). Added migration `0011_require_s3_credential_bucket.sql`, disabling legacy wildcard credentials.
 - **Settings Page**: backup & restore moved to the **General** tab; S3 credentials to the **Credentials** tab.
 - Site header no longer shows the **Delete bucket** button; deleting a bucket lives in **Settings → Danger zone**.

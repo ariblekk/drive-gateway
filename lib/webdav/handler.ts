@@ -356,7 +356,7 @@ export async function handleWebDavRequest(
   // Authenticate user
   const auth = authenticateWebDav(req);
   if (!auth) {
-    res.setHeader("WWW-Authenticate", 'Basic realm="Drive Gateway WebDAV"');
+    res.setHeader("WWW-Authenticate", 'Basic realm="Omnibucket WebDAV"');
     res.status(401).end("Unauthorized");
     return;
   }
@@ -404,7 +404,7 @@ export async function handleWebDavRequest(
           responses.push(
             renderPropResponse({
               href: `${basePrefix}/`,
-              name: "Drive Gateway",
+              name: "Omnibucket",
               isCollection: true,
             }),
           );
@@ -607,7 +607,7 @@ export async function handleWebDavRequest(
           let title = "Root";
 
           if (resolved.type === "root") {
-            title = "Drive Gateway";
+            title = "Omnibucket";
             let buckets = listBuckets();
             if (auth.allowedBucket) {
               buckets = buckets.filter((b) => b.name === auth.allowedBucket);
@@ -1072,7 +1072,7 @@ export async function handleWebDavRequest(
       <D:locktype><D:write/></D:locktype>
       <D:lockscope><D:exclusive/></D:lockscope>
       <D:depth>0</D:depth>
-      <D:owner><D:href>DriveGateway</D:href></D:owner>
+      <D:owner><D:href>Omnibucket</D:href></D:owner>
       <D:timeout>Second-3600</D:timeout>
       <D:locktoken><D:href>urn:uuid:${token}</D:href></D:locktoken>
       <D:lockroot><D:href>${escapeXml(req.url || "/")}</D:href></D:lockroot>

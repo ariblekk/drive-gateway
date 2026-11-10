@@ -1,7 +1,7 @@
 export const openApiSpec = {
   openapi: "3.0.3",
   info: {
-    title: "Drive Gateway API",
+    title: "Omnibucket API",
     version: "1.0.0",
     description:
       "Universal multi-provider storage gateway (Google Drive & S3 backends). Exposes an S3-compatible API (`/s3`) with AWS Signature V4 authentication.",
