@@ -3,24 +3,6 @@ import { unstable_rethrow } from "next/navigation";
 import { errorMessage, GatewayError } from "@/lib/errors";
 import { S3Error } from "@/lib/s3/errors";
 
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Api-Key, Range, X-File-Name, X-File-Type, X-File-Path",
-  "Access-Control-Expose-Headers":
-    "Content-Disposition, Content-Length, Content-Range, Accept-Ranges",
-};
-
-function applyCors(headers: Headers): void {
-  for (const [key, value] of Object.entries(CORS_HEADERS)) {
-    headers.set(key, value);
-  }
-}
-
-// CORS is applied explicitly by the public /api/v1 handlers via withCors().
-// Admin routes are cookie-authenticated and must never be readable by other
-// origins, so json() intentionally does not add Access-Control-* headers.
 export function json(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
@@ -34,21 +16,6 @@ export function jsonError(
   message: string,
 ): Response {
   return json({ error: { code, message } }, { status });
-}
-
-export function preflight(): Response {
-  return new Response(null, { status: 204, headers: CORS_HEADERS });
-}
-
-export function withCors(response: Response): Response {
-  const headers = new Headers(response.headers);
-  applyCors(headers);
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
 }
 
 export function handleRouteError(error: unknown): Response {

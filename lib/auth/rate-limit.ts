@@ -168,15 +168,14 @@ export function clearLoginFailures(
 }
 
 /**
- * Actions that are protected by an admin password or an API key. Their
- * failure counters are keyed per IP in the same table as login attempts.
+ * Actions that are protected by an admin password. Their failure counters are
+ * keyed per IP in the same table as login attempts.
  */
-export type RateLimitAction = "backup" | "restore" | "api-key";
+export type RateLimitAction = "backup" | "restore";
 
 const ACTION_LIMITS = {
   backup: "ADMIN_PASSWORD_MAX_ATTEMPTS",
   restore: "ADMIN_PASSWORD_MAX_ATTEMPTS",
-  "api-key": "API_KEY_MAX_FAILURES",
 } as const;
 
 function actionKey(request: Request, action: RateLimitAction): string {

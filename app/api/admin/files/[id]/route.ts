@@ -8,7 +8,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const file = await deleteFilePermanentlyById(id, null);
+    const file = await deleteFilePermanentlyById(id);
 
     return json({ file: publicFile(file) });
   } catch (error) {

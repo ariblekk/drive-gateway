@@ -256,7 +256,7 @@ export async function GET() {
     </a>
     <div class="topbar-links">
       <a href="/dashboard">← Dashboard</a>
-      <a href="/dashboard/api-keys">Credentials</a>
+      <a href="/dashboard/settings">Credentials</a>
       <a href="/api/openapi.json" target="_blank">OpenAPI JSON</a>
     </div>
   </div>

@@ -91,7 +91,7 @@ export const s3Credentials = sqliteTable("s3_credentials", {
   name: text("name").notNull(),
   accessKeyId: text("access_key_id").notNull().unique(),
   secretCiphertext: text("secret_ciphertext").notNull(),
-  bucketId: text("bucket_id").notNull().default("*"),
+  bucketId: text("bucket_id").notNull(),
   permission: text("permission").notNull().default("read-write"),
   maxStorageBytes: integer("max_storage_bytes"),
   status: text("status").notNull().default("active"),
@@ -135,16 +135,6 @@ export const files = sqliteTable(
   ],
 );
 
-export const apiKeys = sqliteTable("api_keys", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  keyHash: text("key_hash").notNull().unique(),
-  keyPrefix: text("key_prefix").notNull(),
-  lastUsedAt: integer("last_used_at"),
-  revokedAt: integer("revoked_at"),
-  createdAt: integer("created_at").notNull(),
-});
-
 export const activityLog = sqliteTable(
   "activity_log",
   {
@@ -152,7 +142,6 @@ export const activityLog = sqliteTable(
     action: text("action").notNull(),
     fileId: text("file_id"),
     accountId: text("account_id"),
-    apiKeyId: text("api_key_id"),
     bytes: integer("bytes"),
     status: text("status").notNull().default("ok"),
     message: text("message"),
@@ -195,9 +184,6 @@ export type NewS3Credential = typeof s3Credentials.$inferInsert;
 
 export type StoredFile = typeof files.$inferSelect;
 export type NewStoredFile = typeof files.$inferInsert;
-
-export type ApiKey = typeof apiKeys.$inferSelect;
-export type NewApiKey = typeof apiKeys.$inferInsert;
 
 export type ActivityEntry = typeof activityLog.$inferSelect;
 export type NewActivityEntry = typeof activityLog.$inferInsert;

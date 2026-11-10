@@ -35,7 +35,6 @@ async function* limitUpload(
 
 export async function handleUploadRequest(
   request: Request,
-  apiKeyId: string | null,
 ): Promise<Response> {
   const contentType = (request.headers.get("content-type") ?? "").toLowerCase();
   const env = getEnv();
@@ -101,7 +100,6 @@ export async function handleUploadRequest(
       path: virtualPath,
       folderId,
       bucketId,
-      apiKeyId,
     });
 
     return json({ file: publicFile(stored) }, { status: 201 });
@@ -145,7 +143,6 @@ export async function handleUploadRequest(
       "/",
     folderId,
     bucketId,
-    apiKeyId,
   });
 
   return json({ file: publicFile(stored) }, { status: 201 });

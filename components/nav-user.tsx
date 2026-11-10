@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import {
   IconApi,
   IconDotsVertical,
-  IconKey,
   IconLogout,
   IconSettings,
 } from "@tabler/icons-react";
@@ -101,12 +100,6 @@ export function NavUser({
                 <Link href="/dashboard/settings">
                   <IconSettings />
                   Settings
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/dashboard/api-keys">
-                  <IconKey />
-                  Credentials
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>

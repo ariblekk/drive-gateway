@@ -9,6 +9,8 @@ import {
   IconHistory,
 } from "@tabler/icons-react";
 
+import packageJson from "@/package.json";
+
 import { SidebarStorage } from "@/components/gateway/sidebar-storage";
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
@@ -24,7 +26,7 @@ import {
 
 const data = {
   user: {
-    name: "Gateway admin",
+    name: "Hallo Admin",
     email: "admin@localhost",
     avatar: "/avatars/shadcn.jpg",
   },
@@ -35,8 +37,8 @@ const data = {
       icon: IconChartPie,
     },
     {
-      title: "All Files",
-      url: "/dashboard/files",
+      title: "Object Storage",
+      url: "/dashboard/object-storage",
       icon: IconFileStack,
     },
     {
@@ -66,6 +68,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <IconCloudComputing className="size-5!" />
                 <span className="text-base font-semibold group-data-[collapsible=icon]:hidden">
                   Drive Gateway
+                </span>
+                <span className="text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+                  v{packageJson.version}
                 </span>
               </Link>
             </SidebarMenuButton>

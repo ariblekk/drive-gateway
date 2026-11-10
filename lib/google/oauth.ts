@@ -8,7 +8,6 @@ export const GOOGLE_SCOPES = [
   "email",
   "profile",
   "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.metadata.readonly",
 ];
 
 export function createOAuthClient(): OAuth2Client {

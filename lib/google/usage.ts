@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import {
+  files,
   getDb,
   googleAccounts,
   typeUsage,
@@ -13,9 +14,7 @@ import {
   emptyTypeUsage,
   type TypeUsageTotals,
 } from "@/lib/files/mime";
-import { createDriveClient, getAuthorizedClient } from "./client";
 
-const MAX_PAGES = 100;
 export const TYPE_USAGE_STALE_MS = 30 * 60 * 1000;
 
 function totalsToColumns(totals: TypeUsageTotals) {
@@ -40,41 +39,28 @@ export function typeUsageRowToTotals(row: TypeUsage): TypeUsageTotals {
   };
 }
 
-async function scanAccountTypeUsage(
-  account: GoogleAccount,
-): Promise<TypeUsageTotals> {
-  const auth = await getAuthorizedClient(account);
-  const drive = createDriveClient(auth);
+function scanAccountTypeUsage(account: GoogleAccount): TypeUsageTotals {
+  const rows = getDb()
+    .select({ mimeType: files.mimeType, size: files.size })
+    .from(files)
+    .where(and(eq(files.accountId, account.id), eq(files.status, "active")))
+    .all();
+
   const totals = emptyTypeUsage();
-  let pageToken: string | undefined;
-  let pages = 0;
 
-  do {
-    const response = await drive.files.list({
-      q: "'me' in owners and trashed = false",
-      fields: "nextPageToken, files(mimeType, size)",
-      pageSize: 1000,
-      pageToken,
-    });
-
-    for (const file of response.data.files ?? []) {
-      const category = classifyMimeType(file.mimeType ?? null);
-      const size = Number(file.size ?? 0);
-      totals[category].bytes += size;
-      totals[category].count += 1;
-    }
-
-    pageToken = response.data.nextPageToken ?? undefined;
-    pages += 1;
-  } while (pageToken && pages < MAX_PAGES);
+  for (const row of rows) {
+    const category = classifyMimeType(row.mimeType);
+    totals[category].bytes += row.size;
+    totals[category].count += 1;
+  }
 
   return totals;
 }
 
-export async function syncAccountTypeUsage(
+export function syncAccountTypeUsage(
   account: GoogleAccount,
-): Promise<TypeUsageTotals> {
-  const totals = await scanAccountTypeUsage(account);
+): TypeUsageTotals {
+  const totals = scanAccountTypeUsage(account);
   const db = getDb();
   const columns = totalsToColumns(totals);
   const now = Date.now();
@@ -90,10 +76,10 @@ export async function syncAccountTypeUsage(
   return totals;
 }
 
-export async function syncAllTypeUsage(): Promise<{
+export function syncAllTypeUsage(): {
   synced: number;
   failed: Array<{ id: string; email: string; error: string }>;
-}> {
+} {
   const db = getDb();
   const accounts = db
     .select()
@@ -101,25 +87,21 @@ export async function syncAllTypeUsage(): Promise<{
     .all()
     .filter((account) => account.status !== "disconnected");
 
-  const results = await Promise.allSettled(
-    accounts.map((account) => syncAccountTypeUsage(account)),
-  );
-
   const failed: Array<{ id: string; email: string; error: string }> = [];
   let synced = 0;
 
-  results.forEach((result, index) => {
-    if (result.status === "fulfilled") {
+  for (const account of accounts) {
+    try {
+      syncAccountTypeUsage(account);
       synced += 1;
-    } else {
-      const account = accounts[index];
+    } catch (error) {
       failed.push({
         id: account.id,
         email: account.email,
-        error: errorMessage(result.reason),
+        error: errorMessage(error),
       });
     }
-  });
+  }
 
   return { synced, failed };
 }

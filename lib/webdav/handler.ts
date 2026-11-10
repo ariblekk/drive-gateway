@@ -3,7 +3,6 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { and, eq, isNull } from "drizzle-orm";
 
 import {
-  apiKeys,
   files,
   folders,
   getDb,
@@ -12,7 +11,6 @@ import {
   type StoredFile,
 } from "@/lib/db";
 import { getEnv } from "@/lib/env";
-import { hashApiKey } from "@/lib/api/auth";
 import { constantTimeEqual, verifyAdminPassword } from "@/lib/auth/admin-password";
 import {
   decryptS3Secret,
@@ -45,7 +43,6 @@ export interface WebDavAuth {
   user: string;
   permission: "read-write" | "read-only";
   allowedBucket: string | null;
-  apiKeyId?: string | null;
   s3CredentialId?: string | null;
 }
 
@@ -136,37 +133,6 @@ export function authenticateWebDav(req: NextApiRequest): WebDavAuth | null {
       }
     } catch {
       // decrypt failed
-    }
-  }
-
-  // 3. API Key (gwk_...)
-  const possibleKey = username.startsWith("gwk_")
-    ? username
-    : password.startsWith("gwk_")
-      ? password
-      : null;
-
-  if (possibleKey) {
-    const keyHash = hashApiKey(possibleKey);
-    const keyRow = getDb()
-      .select()
-      .from(apiKeys)
-      .where(and(eq(apiKeys.keyHash, keyHash), isNull(apiKeys.revokedAt)))
-      .get();
-
-    if (keyRow) {
-      getDb()
-        .update(apiKeys)
-        .set({ lastUsedAt: Date.now() })
-        .where(eq(apiKeys.id, keyRow.id))
-        .run();
-
-      return {
-        user: keyRow.name,
-        permission: "read-write",
-        allowedBucket: null,
-        apiKeyId: keyRow.id,
-      };
     }
   }
 
@@ -864,7 +830,6 @@ export async function handleWebDavRequest(
           path: virtualPath,
           folderId,
           bucketId: bucketName,
-          apiKeyId: auth.apiKeyId ?? null,
           s3CredentialId: auth.s3CredentialId ?? null,
         });
 
@@ -964,7 +929,7 @@ export async function handleWebDavRequest(
             destFolderId = destResolved.parentId;
             destName = destResolved.file.name;
             existed = true;
-            await deleteFilePermanentlyById(destResolved.file.id, null, false);
+            await deleteFilePermanentlyById(destResolved.file.id, false);
           } else if (destResolved.type === "not_found") {
             if (!destResolved.bucket) {
               res.status(409).end("Conflict: Destination bucket does not exist");
@@ -1052,7 +1017,7 @@ export async function handleWebDavRequest(
             destBucket = destResolved.bucket;
             destFolderId = destResolved.parentId;
             destName = destResolved.file.name;
-            await deleteFilePermanentlyById(destResolved.file.id, null, false);
+            await deleteFilePermanentlyById(destResolved.file.id, false);
           } else if (destResolved.type === "not_found") {
             if (!destResolved.bucket) {
               res.status(409).end("Conflict: Destination bucket does not exist");
@@ -1082,7 +1047,6 @@ export async function handleWebDavRequest(
             path: destVirtualPath,
             folderId: destFolderId,
             bucketId: destBucket.name,
-            apiKeyId: auth.apiKeyId ?? null,
             s3CredentialId: auth.s3CredentialId ?? null,
           });
 

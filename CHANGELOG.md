@@ -2,13 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-11-08
+## [1.0.4] - 2026-11-11
 
 ### Added
 
+- **Object Storage Dashboard**:
+  - Renamed `/dashboard/files` ("All Files") to `/dashboard/object-storage` ("Object Storage"); updated sidebar, header title, trash redirect, and README.
+  - Split the monolithic `files-view` into `components/gateway/object-storage/` subcomponents (metrics, settings, bucket/folder/delete dialogs, file detail sheet).
+  - Tabbed view: **Objects**, **Metrics**, **Settings**.
+  - Metrics tab shows **Average Storage**, **Data Retrieved**, and **Request Distribution** cards, a data-retrieved area chart, and a request-distribution bar chart, backed by `GET /api/admin/buckets/[id]/metrics` (30-day window from the activity log).
+  - Settings tab shows bucket details (name, S3 API endpoint, created, storage account, objects, size) and a danger zone to delete the bucket.
+- **Settings Tabs**: `/dashboard/settings` now splits into **General** (backup & restore) and **Credentials** (S3 credentials).
+- **S3 Credential Management**: credentials can be edited via `PATCH /api/admin/s3-credentials/[id]`, with an edit/delete dropdown per row.
+- Sidebar now shows the app version from `package.json`; the admin email is a static label (`admin@localhost`) so the dashboard stays prerenderable without runtime env.
 - **Permanent Deletion (No Recycle Bin)**:
-  - Dashboard, WebDAV, public REST API, and S3 `DeleteObject` now permanently delete files/folders from the backing provider.
-  - Removed the Recycle Bin navigation; the legacy `/dashboard/trash` URL redirects to All Files.
+  - Dashboard, WebDAV, and S3 `DeleteObject` now permanently delete files/folders from the backing provider.
+  - Removed the Recycle Bin navigation; the legacy `/dashboard/trash` URL redirects to Object Storage.
   - Updated API documentation and README to warn that deletion cannot be undone.
 - **Interactive Storage Topology (React Flow)**:
   - Visual diagram on Overview representing the central project hub connected to storage providers (Google Drive and S3).
@@ -28,7 +37,7 @@ All notable changes to this project will be documented in this file.
   - Full RFC 4918 WebDAV server implementation supporting `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE`, `MKCOL`, `MOVE`, `COPY`, `LOCK`, `UNLOCK`, and `PROPPATCH`.
   - Next.js Pages API routing bypass (`pages/api/webdav/[[...path]].ts` rewritten from `/webdav`) to support non-standard WebDAV HTTP methods prohibited by App Router.
   - Streaming upload handler with disabled Next.js body parser (`bodyParser: false`) for raw payload transfers.
-  - Multi-credential HTTP Basic Auth: Admin credentials (`ADMIN_EMAIL`/`ADMIN_PASSWORD`), S3 Access/Secret keys (with bucket-level isolation and read-only enforcement), and API Keys (`gwk_live_...`).
+  - Multi-credential HTTP Basic Auth: Admin credentials (`ADMIN_EMAIL`/`ADMIN_PASSWORD`) and S3 Access/Secret keys (with bucket-level isolation and read-only enforcement).
   - Native file explorer integration for Windows Explorer (Map Network Drive & PowerShell `net use`), macOS Finder, Cyberduck, and Rclone.
   - HTML directory browser view for standard web browsers.
   - Assert-based WebDAV test suite (`scripts/test-webdav.mjs`).
@@ -36,6 +45,9 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **S3 Credential Bucket Scope**: removed the `All (*)` option; every credential must target a single existing bucket (enforced in UI, API, service, and schema). Added migration `0011_require_s3_credential_bucket.sql`, disabling legacy wildcard credentials.
+- **Settings Page**: backup & restore moved to the **General** tab; S3 credentials to the **Credentials** tab.
+- Site header no longer shows the **Delete bucket** button; deleting a bucket lives in **Settings → Danger zone**.
 - **Centralized Storage Backend Operations**:
   - Consolidated provider-specific upload, download, delete, checksum, and quota dispatching into `lib/storage/backend.ts`.
   - Updated file, folder, and quota services to call the shared dispatcher instead of branching between Google Drive and S3 at each call site.
@@ -47,9 +59,13 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+- **API Keys**: removed the entire API keys feature (routes, dashboard page, components, backup schema, DB table `api_keys`, and `activity_log.api_key_id`) via migration `0010_remove_api_keys.sql`.
 - Removed redundant _"Free Storage"_ row from sidebar breakdown.
 
 ### Fixed
 
+- **Sidebar Admin Email**: sidebar previously rendered the literal string `{process.env.NEXT_PUBLIC_ADMIN_EMAIL}`; it is now a plain hardcoded label.
+- **SideRays Ref During Render**: moved the `settingsRef` assignment into a `useEffect` to satisfy `react-hooks/refs` (no ref writes during render).
+- **S3 Credential Dialog**: corrected field labels and secret display/copy, and moved `AlertDialog` open-state props to the root.
 - **Dark Mode for React Flow Controls**:
   - Overrode `.react-flow__controls` and `.react-flow__controls-button` using design token variables (`--card`, `--card-foreground`, `--border`, `--muted`), fixing the white button background in dark theme.

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       return jsonError(401, "unauthorized", "Login required");
     }
 
-    return await handleUploadRequest(request, null);
+    return await handleUploadRequest(request);
   } catch (error) {
     return handleRouteError(error);
   }

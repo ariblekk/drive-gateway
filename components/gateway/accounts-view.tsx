@@ -33,13 +33,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -340,15 +333,17 @@ export function AccountsView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Connected accounts</CardTitle>
-          <CardDescription>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="font-heading text-sm font-medium">
+            Connected accounts
+          </h2>
+          <p className="text-xs/relaxed text-muted-foreground">
             Google Drive & S3 accounts (Cloudflare R2, MinIO, Wasabi, AWS S3).
             Uploads go to the account with the most free space.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+          </p>
+        </div>
+        <div className="flex flex-col gap-3">
           {connected && (
             <div className="border border-border bg-muted px-3 py-2 text-xs">
               Connected {connected}
@@ -633,8 +628,8 @@ export function AccountsView() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <Dialog open={connectS3Open} onOpenChange={setConnectS3Open}>
         <DialogContent className="sm:max-w-md">

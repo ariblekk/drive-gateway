@@ -49,7 +49,6 @@ export interface SaveUploadInput {
   path?: string;
   folderId?: string | null;
   size?: number;
-  apiKeyId?: string | null;
   bucketId?: string;
   key?: string;
   metadata?: Record<string, unknown>;
@@ -201,7 +200,6 @@ export async function saveUpload(
       path: input.path,
       folderId: input.folderId ?? null,
       size: temp.size,
-      apiKeyId: input.apiKeyId ?? null,
       s3CredentialId: input.s3CredentialId ?? null,
       bucketId: input.bucketId,
       key: input.key,
@@ -223,7 +221,6 @@ export async function saveUploadFromPath(input: {
   path?: string;
   folderId?: string | null;
   size?: number;
-  apiKeyId?: string | null;
   s3CredentialId?: string | null;
   bucketId?: string;
   key?: string;
@@ -241,7 +238,6 @@ async function uploadTempFile(input: {
   path?: string;
   folderId?: string | null;
   size?: number;
-  apiKeyId?: string | null;
   s3CredentialId?: string | null;
   bucketId?: string;
   key?: string;
@@ -362,8 +358,7 @@ async function uploadTempFile(input: {
         action: "upload",
         fileId: id,
         accountId: account.id,
-        apiKeyId: input.apiKeyId ?? null,
-        bytes: size,
+          bytes: size,
         status: "ok",
       });
 
@@ -396,8 +391,7 @@ async function uploadTempFile(input: {
       recordActivity({
         action: "upload",
         accountId: account.id,
-        apiKeyId: input.apiKeyId ?? null,
-        bytes: size,
+          bytes: size,
         status: "error",
         message: message.slice(0, 500),
       });
@@ -554,6 +548,7 @@ export function getAccountById(id: string): GoogleAccount {
 export async function openFileDownload(
   id: string,
   range?: string | null,
+  action: "download" | "preview" = "download",
 ): Promise<{
   file: StoredFile;
   account: GoogleAccount;
@@ -573,7 +568,7 @@ export async function openFileDownload(
   );
 
   recordActivity({
-    action: "download",
+    action,
     fileId: file.id,
     accountId: account.id,
     bytes: file.size,
@@ -585,7 +580,6 @@ export async function openFileDownload(
 
 export async function deleteFilePermanentlyById(
   id: string,
-  apiKeyId?: string | null,
   deleteRemote = true,
 ): Promise<StoredFile> {
   const db = getDb();
@@ -619,7 +613,6 @@ export async function deleteFilePermanentlyById(
     action: "delete",
     fileId: id,
     accountId: file.accountId,
-    apiKeyId: apiKeyId ?? null,
     bytes: file.size,
     status: "ok",
   });

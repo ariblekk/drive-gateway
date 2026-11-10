@@ -38,6 +38,7 @@ import {
   isAwsChunked,
   verifyS3Request,
 } from "@/lib/s3/sigv4";
+import { resolveContentType } from "@/lib/preview";
 import {
   aclXml,
   listBucketsXml,
@@ -263,9 +264,11 @@ async function handleGetObject(
 
   headers.set(
     "Content-Type",
-    readHeader(response.headers, "content-type") ??
-      file.mimeType ??
-      "application/octet-stream",
+    resolveContentType(
+      readHeader(response.headers, "content-type"),
+      file.mimeType,
+      file.name,
+    ),
   );
 
   const contentRange = readHeader(
@@ -508,7 +511,7 @@ async function handlePutObject(
   });
 
   for (const oldFile of previous) {
-    await deleteFilePermanentlyById(oldFile.id, null, false);
+    await deleteFilePermanentlyById(oldFile.id, false);
   }
 
   const etag = stored.etag ?? stored.id;

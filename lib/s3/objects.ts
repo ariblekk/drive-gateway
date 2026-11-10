@@ -12,6 +12,7 @@ import {
   getFileByBucketKey,
 } from "@/lib/files/service";
 import { buildFolderPathMap } from "@/lib/folders/service";
+import { contentDisposition, isInlineSafe, quoteEtag } from "@/lib/preview";
 
 import { S3Error } from "./errors";
 import type { S3ListEntry, S3ListResult } from "./xml";
@@ -287,32 +288,6 @@ export function parseMetadata(
   }
 }
 
-function isInlineSafe(mimeType: string): boolean {
-  const mime = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
-
-  if (mime === "application/pdf" || mime === "text/plain") {
-    return true;
-  }
-
-  // SVG can embed scripts, so it is always downloaded.
-  if (mime.startsWith("image/")) {
-    return !mime.includes("svg");
-  }
-
-  return mime.startsWith("audio/") || mime.startsWith("video/");
-}
-
-function contentDisposition(filename: string, inline: boolean): string {
-  const ascii = filename
-    .replace(/[^\x20-\x7e]/g, "_")
-    .replace(/["\\]/g, "_")
-    .slice(0, 200);
-  const fallback = ascii || "download";
-  const encoded = encodeURIComponent(filename);
-
-  return `${inline ? "inline" : "attachment"}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
-}
-
 export async function objectHeaders(
   file: StoredFile,
 ): Promise<Headers> {
@@ -322,7 +297,7 @@ export async function objectHeaders(
     "Content-Type": mimeType,
     "Content-Length": String(file.size),
     "Last-Modified": new Date(file.updatedAt).toUTCString(),
-    ETag: `"${etag}"`,
+    ETag: quoteEtag(etag),
     "Accept-Ranges": "bytes",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",

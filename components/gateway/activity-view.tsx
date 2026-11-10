@@ -8,13 +8,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -67,14 +61,14 @@ export function ActivityView() {
   const to = Math.min(offset + PAGE_SIZE, total);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Activity log</CardTitle>
-        <CardDescription>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 className="font-heading text-sm font-medium">Activity log</h2>
+        <p className="text-xs/relaxed text-muted-foreground">
           Uploads, downloads, deletions, and errors from the gateway.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </p>
+      </div>
+      <div className="flex flex-col gap-3">
         {error && (
           <div className="mb-3 border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
@@ -87,8 +81,9 @@ export function ActivityView() {
           <p className="text-xs text-muted-foreground">No activity yet.</p>
         ) : (
           <div className="flex flex-col gap-3">
-            <Table>
-              <TableHeader>
+            <Card className="p-0">
+              <Table>
+                <TableHeader>
                 <TableRow>
                   <TableHead>When</TableHead>
                   <TableHead>Action</TableHead>
@@ -129,6 +124,7 @@ export function ActivityView() {
                 ))}
               </TableBody>
             </Table>
+          </Card>
 
             <div className="flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>
@@ -162,7 +158,7 @@ export function ActivityView() {
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

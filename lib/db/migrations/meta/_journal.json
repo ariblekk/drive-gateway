@@ -71,6 +71,20 @@
       "when": 1794151883553,
       "tag": "0009_spotty_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794319676073,
+      "tag": "0010_remove_api_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794327999957,
+      "tag": "0011_require_s3_credential_bucket",
+      "breakpoints": true
     }
   ]
 }

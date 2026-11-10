@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { cn } from "cn";
 import {
-  Background,
   Controls,
   Handle,
   Position,
@@ -49,6 +48,7 @@ import {
 } from "./client";
 import { formatBytes, formatDate } from "./format";
 import type { OverviewResponse } from "./types";
+import SideRays from "../SideRays";
 
 function ProjectNode({ data }: { data: { label: string; sublabel: string } }) {
   return (
@@ -380,7 +380,27 @@ export function OverviewCards() {
                     nodesConnectable={false}
                     proOptions={{ hideAttribution: true }}
                   >
-                    <Background color="var(--border)" gap={20} size={1} />
+                    <SideRays
+                      rayColor1="var(--primary)"
+                      rayColor2="var(--primary)"
+                      origin="top-right"
+                      speed={2.5}
+                      intensity={2}
+                      spread={2}
+                      density={5}
+                      followMouse
+                      blend={0.6}
+                      sharpness={0.5}
+                      tilt={0}
+                      falloff={1.6}
+                      glow={1}
+                      saturation={1}
+                      dust={0}
+                      mouseInfluence={0.5}
+                      intro
+                      lightMode
+                      opacity={1}
+                    />
                     <Controls showInteractive={false} />
                   </ReactFlow>
                 </div>

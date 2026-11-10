@@ -11,16 +11,15 @@ Uploads are routed automatically to the connected storage account with the **mos
 - Automatic account selection across all providers based on remaining quota (`quota` or `round_robin`).
 - S3-compatible API endpoint (`/s3`) with AWS Signature V4 authentication, bucket isolation, and storage limits.
 - WebDAV endpoint (`/webdav`) with RFC 4918 support for Windows Explorer network drive mapping, macOS Finder, Cyberduck, and Rclone.
-- Admin dashboard: overview with bandwidth charts, accounts & quota, file manager with bucket selector, API keys & S3 credentials, activity log.
+- Admin dashboard: overview with bandwidth charts, accounts & quota, file manager with bucket selector, S3 credentials, activity log.
 - File manager: folders, breadcrumb navigation, search, pagination, checkbox bulk actions (files and folders), rename, move, and permanent delete.
 - Upload dialog with drag & drop, multiple files, per-file progress, bucket selection, and folder destination.
 - Server-side upload limit from `MAX_UPLOAD_BYTES`; the limit is shown in the UI.
-- Public REST API: upload, list, metadata, download with `Range`, delete, and stats.
 - Deletes remove files and folders immediately from their storage provider; there is no application recycle bin. Existing trashed Google Drive records from earlier versions remain visible only in provider storage and are not automatically purged during upgrade.
 - Sidebar storage breakdown: photos, videos, documents, free space, and used space.
 - Sonner toasts, confirmation dialogs, and responsive header actions (icon-only on mobile).
 - SQLite + Drizzle ORM, Docker support with a persistent volume.
-- Secrets and refresh tokens encrypted with AES-256-GCM; API keys stored as SHA-256 hashes.
+- Secrets and refresh tokens encrypted with AES-256-GCM; S3 credentials stored securely.
 
 ## Stack
 
@@ -67,10 +66,9 @@ openid
 email
 profile
 https://www.googleapis.com/auth/drive.file
-https://www.googleapis.com/auth/drive.metadata.readonly
 ```
 
-`drive.file` only grants access to files created by the gateway. For full Drive access, replace the Drive scopes with `https://www.googleapis.com/auth/drive`.
+`drive.file` is a non-sensitive scope: it only grants access to files created by the gateway, and it does not trigger Google's restricted-scope review. It is also enough to read `storageQuota` for quota syncing. For full Drive access, replace it with `https://www.googleapis.com/auth/drive` — note that this is a restricted scope and requires Google verification (and a security assessment for public apps).
 
 ## Environment
 
@@ -123,29 +121,9 @@ docker compose logs -f gateway
 
 1. Log in at `/login`.
 2. Go to `/dashboard/accounts` and click **Connect account**. Repeat for each Google account.
-3. Upload from `/dashboard/files` or the sidebar. Files are routed by available quota.
+3. Upload from `/dashboard/object-storage` or the sidebar. Files are routed by available quota.
 4. Manage folders and files with checkboxes, bulk actions, or the 3-dot row menu.
 5. Deleting a file or folder removes it permanently from the storage provider; verify before confirming because it cannot be restored from this app.
-6. Create API keys at `/dashboard/api-keys`. A key is shown only once.
-
-## API
-
-Interactive API documentation (Swagger UI) and OpenAPI 3.0 specifications are available at:
-- **Swagger Docs:** `http://localhost:3000/docs` (or `https://your-domain/docs`)
-- **OpenAPI 3.0 JSON:** `http://localhost:3000/api/openapi.json`
-
-Authenticate requests using either header:
-
-```http
-Authorization: Bearer <api-key>
-```
-
-```http
-x-api-key: <api-key>
-```
-
-The admin dashboard uses `/api/admin/*` with the admin session cookie. It is not accessible with API keys.
-
 ## S3-Compatible API
 
 Drive Gateway provides an S3-compatible API at `/s3`. It supports standard AWS Signature V4 authentication using access key ID and secret access key.
@@ -155,12 +133,12 @@ Drive Gateway provides an S3-compatible API at `/s3`. It supports standard AWS S
 - **Endpoint:** `http://<host>:3000/s3` (or `https://your-domain/s3`)
 - **Region:** `us-east-1` (or whatever `S3_REGION` is set to)
 - **Path-style:** Required (`force_path_style = true`)
-- **Credentials:** Create at `/dashboard/api-keys` under the **S3 credentials** card.
+- **Credentials:** Create at `/dashboard/settings` under **S3 credentials**.
 
 ### Credential Isolation & Quota
 
 When creating S3 credentials in the dashboard, you can configure:
-- **Bucket Scope:** Restrict the credential to a single bucket (e.g. `blog`), or allow access to `All buckets (*)`. An isolated credential cannot see or access other buckets (`ListBuckets` only returns its assigned bucket; requests to other buckets return `403 AccessDenied`).
+- **Bucket Scope:** Each credential is restricted to one selected bucket (e.g. `blog`). It cannot see or access other buckets (`ListBuckets` only returns its assigned bucket; requests to other buckets return `403 AccessDenied`).
 - **Permissions:** Choose `Read & Write` or `Read Only`. Read-only credentials reject `PUT` and `DELETE` requests with `403 AccessDenied`.
 - **Storage Limit:** Set a maximum storage capacity (e.g. `10 GB` or `500 MB`). Uploads exceeding the limit are blocked with `403 QuotaExceeded`. The dashboard shows live usage against the quota (`Used / Max`).
 
@@ -237,7 +215,6 @@ Connect to `https://your-domain/webdav` in production (or `http://localhost:3000
 Supports HTTP Basic Authentication with:
 - **Admin credentials**: `ADMIN_EMAIL` as username and `ADMIN_PASSWORD` as password.
 - **S3 credentials**: `accessKeyId` (`s3_...`) as username and `secretAccessKey` as password (supports bucket-level isolation and read-only permissions).
-- **API Keys**: `api` as username and `gwk_live_...` as password.
 
 #### Client Setup Examples
 - **Windows File Explorer**:
@@ -273,23 +250,22 @@ Supports HTTP Basic Authentication with:
 - **SQLite** — suitable for personal/small deployments; not horizontally scalable.
 - **Single-request upload** — no chunked or resumable upload.
 - **Cloudflare** — uploads are still capped at 100 MB per request on Free/Pro plans. `MAX_UPLOAD_BYTES` cannot bypass Cloudflare; use a DNS-only hostname or LAN access for larger files.
-- **OAuth Testing mode** — refresh tokens can expire after 7 days. Publish the OAuth app for long-term use.
+- **OAuth publishing** — while the consent screen is in **Testing**, only test users can connect and refresh tokens expire after 7 days. Publish the app to **Production** for any account to connect and for long-lived tokens; because the gateway only requests the non-sensitive `drive.file` scope, no restricted-scope review is required.
 - **Quota totals** include Gmail and Photos, so the gateway file breakdown can be smaller than the account's used space.
 - **Disconnect is soft** — tokens are removed, but indexed files remain in Google Drive.
 
 ## Security
 
 - `/dashboard` and `/api/admin/*` require the admin session; `/docs` and `/api/openapi.json` are protected too.
-- `/api/v1/*` uses API keys, never the admin session. API keys are global admin bridges and are not bucket-scoped by design.
 - S3 credentials are bucket-scoped. An empty bucket is rejected; wildcard access requires an explicit opt-in.
 - `ADMIN_PASSWORD` is compared in constant time; set a strong password and keep it only in the deployment environment.
-- Login, backup, restore, and invalid API-key attempts are rate limited per IP and persisted in SQLite. Successful checks clear the counter.
+- Login, backup, and restore attempts are rate limited per IP and persisted in SQLite. Successful checks clear the counter.
 - Logging out bumps a session epoch, revoking every outstanding session token (including stolen cookies).
 - Responses include `nosniff`, framing protection, a restrictive CSP, and a global `Content-Security-Policy` for the app. S3 objects are served with a sandbox CSP and safe `Content-Disposition`; only safe MIME types render inline.
-- CORS headers are applied only to the public `/api/v1/*` endpoints, never to cookie-authenticated admin routes.
+- CORS is not enabled for the removed public REST API; cookie-authenticated admin routes do not allow cross-origin access.
 - S3 backend endpoints are checked against SSRF: loopback, link-local, metadata hosts, and private ranges are blocked unless `S3_ALLOW_PRIVATE_ENDPOINTS=1`.
 - S3 uploads must sign a payload hash; `UNSIGNED-PAYLOAD` is rejected for write operations.
-- Refresh tokens and S3 secrets are encrypted with AES-256-GCM; API keys are stored as SHA-256 hashes.
+- Refresh tokens and S3 secrets are encrypted with AES-256-GCM.
 - `MAX_UPLOAD_BYTES` is enforced on the server before the body is processed.
 - Changing `ENCRYPTION_KEY` invalidates existing sessions and stored refresh tokens.
 - Use HTTPS in production and bind the container to loopback behind a TLS reverse proxy.
@@ -298,7 +274,7 @@ Supports HTTP Basic Authentication with:
 
 ```text
 app/api/            auth, public v1, admin, and upload routes
-app/dashboard/      admin pages (overview, accounts, files, activity, api-keys)
+app/dashboard/      admin pages (overview, accounts, files, activity, settings)
 components/gateway/ admin UI components
 components/ui/      shadcn/ui components
 lib/db/             Drizzle schema, connection, migrations

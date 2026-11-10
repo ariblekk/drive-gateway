@@ -4,7 +4,7 @@ export const openApiSpec = {
     title: "Drive Gateway API",
     version: "1.0.0",
     description:
-      "Universal multi-provider storage gateway (Google Drive & S3 backends). Exposes both a public REST API (`/api/v1`) and an S3-compatible API (`/s3`) with AWS Signature V4 authentication.",
+      "Universal multi-provider storage gateway (Google Drive & S3 backends). Exposes an S3-compatible API (`/s3`) with AWS Signature V4 authentication.",
   },
   servers: [
     {
@@ -14,293 +14,12 @@ export const openApiSpec = {
   ],
   tags: [
     {
-      name: "Public REST API (v1)",
-      description:
-        "File upload, listing, download, and deletion via API keys.",
-    },
-    {
       name: "S3 Compatible API (/s3)",
       description:
         "S3-compatible object operations with AWS Signature V4 authentication.",
     },
   ],
   paths: {
-    "/api/v1/upload": {
-      post: {
-        tags: ["Public REST API (v1)"],
-        summary: "Upload a file",
-        description:
-          "Upload a file via multipart form-data or raw octet-stream body. The file is automatically placed on the storage account with the most remaining quota.",
-        security: [{ ApiKeyAuth: [] }, { XApiKeyAuth: [] }],
-        parameters: [
-          {
-            name: "name",
-            in: "query",
-            required: false,
-            schema: { type: "string" },
-            description: "File name (for raw stream uploads)",
-          },
-          {
-            name: "folderId",
-            in: "query",
-            required: false,
-            schema: { type: "string" },
-            description: "Target virtual folder ID (or 'root')",
-          },
-          {
-            name: "path",
-            in: "query",
-            required: false,
-            schema: { type: "string" },
-            description: "Target virtual path (e.g. /documents)",
-          },
-        ],
-        requestBody: {
-          required: true,
-          content: {
-            "multipart/form-data": {
-              schema: {
-                type: "object",
-                required: ["file"],
-                properties: {
-                  file: {
-                    type: "string",
-                    format: "binary",
-                    description: "The file to upload",
-                  },
-                  name: {
-                    type: "string",
-                    description: "Optional custom file name",
-                  },
-                  folderId: {
-                    type: "string",
-                    description: "Optional folder ID",
-                  },
-                  path: {
-                    type: "string",
-                    description: "Optional virtual path",
-                  },
-                },
-              },
-            },
-            "application/octet-stream": {
-              schema: {
-                type: "string",
-                format: "binary",
-              },
-            },
-          },
-        },
-        responses: {
-          "201": {
-            description: "File uploaded successfully",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    file: { $ref: "#/components/schemas/FileItem" },
-                  },
-                },
-              },
-            },
-          },
-          "400": { $ref: "#/components/responses/BadRequest" },
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "413": { description: "File exceeds MAX_UPLOAD_BYTES" },
-          "507": { description: "No storage account has enough free space" },
-        },
-      },
-    },
-    "/api/v1/files": {
-      get: {
-        tags: ["Public REST API (v1)"],
-        summary: "List active files",
-        description: "List files with optional query search, folder filter, and pagination.",
-        security: [{ ApiKeyAuth: [] }, { XApiKeyAuth: [] }],
-        parameters: [
-          {
-            name: "q",
-            in: "query",
-            required: false,
-            schema: { type: "string" },
-            description: "Search keyword matching file name",
-          },
-          {
-            name: "folderId",
-            in: "query",
-            required: false,
-            schema: { type: "string" },
-            description: "Filter files in specific folder ID (or 'root')",
-          },
-          {
-            name: "limit",
-            in: "query",
-            required: false,
-            schema: { type: "integer", default: 20, minimum: 1, maximum: 100 },
-          },
-          {
-            name: "offset",
-            in: "query",
-            required: false,
-            schema: { type: "integer", default: 0, minimum: 0 },
-          },
-        ],
-        responses: {
-          "200": {
-            description: "List of files",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    files: {
-                      type: "array",
-                      items: { $ref: "#/components/schemas/FileItem" },
-                    },
-                    total: { type: "integer" },
-                    limit: { type: "integer" },
-                    offset: { type: "integer" },
-                  },
-                },
-              },
-            },
-          },
-          "401": { $ref: "#/components/responses/Unauthorized" },
-        },
-      },
-    },
-    "/api/v1/files/{id}": {
-      get: {
-        tags: ["Public REST API (v1)"],
-        summary: "Get file metadata",
-        security: [{ ApiKeyAuth: [] }, { XApiKeyAuth: [] }],
-        parameters: [
-          {
-            name: "id",
-            in: "path",
-            required: true,
-            schema: { type: "string" },
-          },
-        ],
-        responses: {
-          "200": {
-            description: "File metadata",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    file: { $ref: "#/components/schemas/FileItem" },
-                  },
-                },
-              },
-            },
-          },
-          "404": { description: "File not found" },
-        },
-      },
-      delete: {
-        tags: ["Public REST API (v1)"],
-        summary: "Permanently delete file",
-        description: "Permanently deletes the file from the gateway and its storage provider.",
-        security: [{ ApiKeyAuth: [] }, { XApiKeyAuth: [] }],
-        parameters: [
-          {
-            name: "id",
-            in: "path",
-            required: true,
-            schema: { type: "string" },
-          },
-        ],
-        responses: {
-          "200": {
-            description: "File deleted permanently",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    file: { $ref: "#/components/schemas/FileItem" },
-                  },
-                },
-              },
-            },
-          },
-          "404": { description: "File not found" },
-        },
-      },
-    },
-    "/api/v1/files/{id}/download": {
-      get: {
-        tags: ["Public REST API (v1)"],
-        summary: "Download file stream",
-        description: "Download the file content. Supports HTTP Range requests for streaming and resumable downloads.",
-        security: [{ ApiKeyAuth: [] }, { XApiKeyAuth: [] }],
-        parameters: [
-          {
-            name: "id",
-            in: "path",
-            required: true,
-            schema: { type: "string" },
-          },
-          {
-            name: "Range",
-            in: "header",
-            required: false,
-            schema: { type: "string", example: "bytes=0-1048575" },
-            description: "HTTP Range header for partial content",
-          },
-        ],
-        responses: {
-          "200": {
-            description: "Full file binary stream",
-            content: {
-              "application/octet-stream": {
-                schema: { type: "string", format: "binary" },
-              },
-            },
-          },
-          "206": {
-            description: "Partial content range",
-            content: {
-              "application/octet-stream": {
-                schema: { type: "string", format: "binary" },
-              },
-            },
-          },
-          "404": { description: "File not found" },
-        },
-      },
-    },
-    "/api/v1/stats": {
-      get: {
-        tags: ["Public REST API (v1)"],
-        summary: "Storage statistics",
-        description: "Returns aggregated statistics across all connected storage accounts.",
-        security: [{ ApiKeyAuth: [] }, { XApiKeyAuth: [] }],
-        responses: {
-          "200": {
-            description: "Gateway statistics",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    accounts: { type: "integer" },
-                    totalFiles: { type: "integer" },
-                    totalFileBytes: { type: "integer" },
-                    totalLimitBytes: { type: "integer" },
-                    totalUsedBytes: { type: "integer" },
-                    totalFreeBytes: { type: "integer" },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
     "/s3": {
       get: {
         tags: ["S3 Compatible API (/s3)"],
@@ -473,41 +192,12 @@ export const openApiSpec = {
   },
   components: {
     securitySchemes: {
-      ApiKeyAuth: {
-        type: "http",
-        scheme: "bearer",
-        bearerFormat: "gwk_live_...",
-        description: "API key passed in `Authorization: Bearer <key>` header.",
-      },
-      XApiKeyAuth: {
-        type: "apiKey",
-        in: "header",
-        name: "x-api-key",
-        description: "API key passed in `x-api-key` header.",
-      },
       AwsSigV4: {
         type: "apiKey",
         in: "header",
         name: "Authorization",
         description:
           "AWS Signature Version 4 (AWS4-HMAC-SHA256). Handled automatically by AWS CLI, rclone, and S3 SDKs.",
-      },
-    },
-    schemas: {
-      FileItem: {
-        type: "object",
-        properties: {
-          id: { type: "string", format: "uuid" },
-          name: { type: "string" },
-          size: { type: "integer" },
-          mimeType: { type: "string", nullable: true },
-          path: { type: "string" },
-          bucketId: { type: "string" },
-          key: { type: "string" },
-          status: { type: "string", enum: ["active"] },
-          createdAt: { type: "integer" },
-          updatedAt: { type: "integer" },
-        },
       },
     },
     responses: {
@@ -531,7 +221,7 @@ export const openApiSpec = {
         },
       },
       Unauthorized: {
-        description: "Missing or invalid API key / S3 credentials",
+        description: "Missing or invalid S3 credentials",
       },
     },
   },

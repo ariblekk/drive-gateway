@@ -10,11 +10,10 @@ import { usePathname } from "next/navigation";
 
 const ROUTE_TITLES: Record<string, string> = {
   "/dashboard": "Overview",
-  "/dashboard/files": "All Files",
+  "/dashboard/object-storage": "Object Storage",
   "/dashboard/accounts": "Accounts & Quota",
   "/dashboard/activity": "Activity Log",
   "/dashboard/settings": "Settings",
-  "/dashboard/api-keys": "API Keys",
   "/docs": "API Documentation",
 };
 

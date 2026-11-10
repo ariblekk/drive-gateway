@@ -26,14 +26,12 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as {
       name?: unknown;
       bucketId?: unknown;
-      allowAllBuckets?: unknown;
       permission?: unknown;
       maxStorageBytes?: unknown;
     } | null;
     const name = typeof body?.name === "string" ? body.name : "";
     const bucketId =
       typeof body?.bucketId === "string" ? body.bucketId.trim() : "";
-    const allowAllBuckets = body?.allowAllBuckets === true;
     const permission =
       body?.permission === "read-only"
         ? "read-only"
@@ -60,18 +58,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (bucketId === "*" && !allowAllBuckets) {
-      throw new GatewayError(
-        "bad_request",
-        "Access to all buckets must be granted explicitly",
-        400,
-      );
-    }
-
     const { credential, secretAccessKey } = createS3Credential({
       name,
       bucketId,
-      allowAllBuckets,
       permission,
       maxStorageBytes,
     });

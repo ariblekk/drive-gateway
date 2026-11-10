@@ -4,6 +4,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 
 import { decrypt, encrypt } from "@/lib/crypto";
 import {
+  buckets,
   files,
   getDb,
   s3Credentials,
@@ -15,11 +16,6 @@ export type CreateS3CredentialInput = {
   bucketId: string;
   permission?: "read-write" | "read-only";
   maxStorageBytes?: number | null;
-  /**
-   * Wildcard access is never implicit. Callers must opt in explicitly with
-   * `bucketId: "*"` plus `allowAllBuckets: true`.
-   */
-  allowAllBuckets?: boolean;
 };
 
 export type S3CredentialWithUsage = S3Credential & {
@@ -78,16 +74,11 @@ export function createS3Credential(
 
   const bucketId = input.bucketId.trim();
 
-  if (!bucketId) {
-    throw new Error(
-      "A bucket must be selected for this S3 credential",
-    );
+  if (!bucketId || bucketId === "*") {
+    throw new Error("A specific bucket must be selected for this S3 credential");
   }
-
-  if (bucketId === "*" && input.allowAllBuckets !== true) {
-    throw new Error(
-      "Granting access to all buckets requires allowAllBuckets=true",
-    );
+  if (!getDb().select().from(buckets).where(eq(buckets.name, bucketId)).get()) {
+    throw new Error("The selected bucket does not exist");
   }
 
   const id = crypto.randomUUID();
@@ -180,7 +171,40 @@ export function touchS3Credential(id: string): void {
     .run();
 }
 
-export function revokeS3Credential(
+export function updateS3Credential(
+  id: string,
+  input: CreateS3CredentialInput,
+): S3Credential | null {
+  const existing = getS3CredentialById(id);
+  if (!existing) return null;
+
+  const name = input.name.trim();
+  const bucketId = input.bucketId.trim();
+  if (!name || !bucketId || bucketId === "*") {
+    throw new Error("Credential name and one specific bucket are required");
+  }
+  if (!getDb().select().from(buckets).where(eq(buckets.name, bucketId)).get()) {
+    throw new Error("The selected bucket does not exist");
+  }
+
+  getDb()
+    .update(s3Credentials)
+    .set({
+      name,
+      bucketId,
+      permission: input.permission === "read-only" ? "read-only" : "read-write",
+      maxStorageBytes:
+        typeof input.maxStorageBytes === "number" && input.maxStorageBytes > 0
+          ? Math.floor(input.maxStorageBytes)
+          : null,
+    })
+    .where(eq(s3Credentials.id, id))
+    .run();
+
+  return getS3CredentialById(id);
+}
+
+export function deleteS3Credential(
   id: string,
 ): S3Credential | null {
   const existing = getS3CredentialById(id);
@@ -190,10 +214,9 @@ export function revokeS3Credential(
   }
 
   getDb()
-    .update(s3Credentials)
-    .set({ status: "revoked" })
+    .delete(s3Credentials)
     .where(eq(s3Credentials.id, id))
     .run();
 
-  return getS3CredentialById(id);
+  return existing;
 }

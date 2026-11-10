@@ -6,7 +6,6 @@ export function recordActivity(entry: {
   action: string;
   fileId?: string | null;
   accountId?: string | null;
-  apiKeyId?: string | null;
   bytes?: number | null;
   status?: "ok" | "error";
   message?: string | null;
@@ -18,7 +17,6 @@ export function recordActivity(entry: {
       action: entry.action,
       fileId: entry.fileId ?? null,
       accountId: entry.accountId ?? null,
-      apiKeyId: entry.apiKeyId ?? null,
       bytes: entry.bytes ?? null,
       status: entry.status ?? "ok",
       message: entry.message ?? null,

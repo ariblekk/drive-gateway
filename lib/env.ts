@@ -46,11 +46,6 @@ const envSchema = z
       .int()
       .positive()
       .default(5),
-    API_KEY_MAX_FAILURES: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(30),
   })
   .refine(
     (env) =>

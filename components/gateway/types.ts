@@ -6,7 +6,6 @@ export interface RestoreResult {
     buckets: number;
     s3Credentials: number;
     files: number;
-    apiKeys: number;
   };
 }
 
@@ -98,13 +97,12 @@ export interface BucketItem {
   totalBytes: number;
 }
 
-export interface ApiKeyItem {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  lastUsedAt: number | null;
-  revokedAt: number | null;
-  createdAt: number;
+export interface BucketMetrics {
+  rangeDays: number;
+  dataRetrievedBytes: number;
+  requestCount: number;
+  traffic: { date: string; retrievedBytes: number }[];
+  distribution: { action: string; count: number }[];
 }
 
 export interface S3CredentialItem {
@@ -125,7 +123,6 @@ export interface ActivityItem {
   action: string;
   fileId: string | null;
   accountId: string | null;
-  apiKeyId: string | null;
   bytes: number | null;
   status: string;
   message: string | null;

@@ -1,6 +1,5 @@
 import type {
   ActivityEntry,
-  ApiKey,
   GoogleAccount,
   S3Credential,
   StoredFile,
@@ -48,19 +47,6 @@ export function publicFile(file: StoredFile) {
 
 export type PublicFile = ReturnType<typeof publicFile>;
 
-export function publicApiKey(key: ApiKey) {
-  return {
-    id: key.id,
-    name: key.name,
-    keyPrefix: key.keyPrefix,
-    lastUsedAt: key.lastUsedAt,
-    revokedAt: key.revokedAt,
-    createdAt: key.createdAt,
-  };
-}
-
-export type PublicApiKey = ReturnType<typeof publicApiKey>;
-
 export function publicS3Credential(
   credential: S3Credential & { usedStorageBytes?: number },
 ) {
@@ -86,7 +72,6 @@ export function publicActivity(entry: ActivityEntry) {
     action: entry.action,
     fileId: entry.fileId,
     accountId: entry.accountId,
-    apiKeyId: entry.apiKeyId,
     bytes: entry.bytes,
     status: entry.status,
     message: entry.message,
