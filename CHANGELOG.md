@@ -64,6 +64,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **S3 Endpoint Display**: the S3 API endpoint was read from `NEXT_PUBLIC_GATEWAY_URL`, which is inlined at build time and unavailable in the Docker build, so production rendered a bare `/s3`. The endpoint is now derived at runtime from `window.location.origin` (Object Storage → Settings, and Settings → Credentials). `NEXT_PUBLIC_GATEWAY_URL` is no longer used.
 - **Sidebar Admin Email**: sidebar previously rendered the literal string `{process.env.NEXT_PUBLIC_ADMIN_EMAIL}`; it is now a plain hardcoded label.
 - **SideRays Ref During Render**: moved the `settingsRef` assignment into a `useEffect` to satisfy `react-hooks/refs` (no ref writes during render).
 - **S3 Credential Dialog**: corrected field labels and secret display/copy, and moved `AlertDialog` open-state props to the root.

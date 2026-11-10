@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { IconTrash } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,8 @@ import {
 
 import { formatBytes, formatDate } from "../format";
 import type { Account, BucketItem } from "../types";
+
+const subscribeToNothing = () => () => {};
 
 export function BucketSettingsTab({
   bucket,
@@ -28,11 +31,14 @@ export function BucketSettingsTab({
         ?.email ?? bucket.storageAccountId)
     : "Auto (by free space)";
 
-  const configuredUrl = process.env.NEXT_PUBLIC_GATEWAY_URL?.replace(
-    /\/+$/,
-    "",
+  // Runtime origin, not build-time env: NEXT_PUBLIC_* is inlined at build and
+  // absent in the Docker build, which rendered a bare "/s3" in production.
+  const origin = useSyncExternalStore(
+    subscribeToNothing,
+    () => window.location.origin,
+    () => "",
   );
-  const endpoint = configuredUrl ? `${configuredUrl}/s3` : "/s3";
+  const endpoint = `${origin}/s3`;
 
   return (
     <>

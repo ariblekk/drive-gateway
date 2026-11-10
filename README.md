@@ -4,6 +4,16 @@ A multi-provider **storage gateway** (Google Drive & S3 backends) with an admin 
 
 Uploads are routed automatically to the connected storage account with the **most free space** (ties go to the least recently used account), or round-robin if configured.
 
+## Screenshots
+
+| Overview | Object Storage |
+| --- | --- |
+| ![Overview](docs/screenshots/overview.webp) | ![Object Storage](docs/screenshots/object-storage.webp) |
+
+| Accounts & Quota | S3 Credentials |
+| --- | --- |
+| ![Accounts & Quota](docs/screenshots/accounts-quota.webp) | ![S3 Credentials](docs/screenshots/credentials.webp) |
+
 ## Features
 
 - Connect multiple **Google Drive** accounts via OAuth 2.0.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { IconDotsVertical, IconPlus, IconPencil, IconTrash } from "@tabler/icons-react";
 import { toast } from "sonner";
 
@@ -67,6 +67,8 @@ type CreatedCredential = {
   secretAccessKey: string;
 };
 
+const subscribeToNothing = () => () => {};
+
 export function S3CredentialsCard() {
   const [credentials, setCredentials] = useState<S3CredentialItem[] | null>(
     null,
@@ -87,6 +89,12 @@ export function S3CredentialsCard() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toDelete, setToDelete] = useState<S3CredentialItem | null>(null);
+  const origin = useSyncExternalStore(
+    subscribeToNothing,
+    () => window.location.origin,
+    () => "",
+  );
+  const endpoint = `${origin}/s3`;
   const [region, setRegion] = useState("us-east-1");
 
   useEffect(() => {
@@ -265,7 +273,7 @@ export function S3CredentialsCard() {
         <div className="flex flex-col gap-1 border border-border bg-muted/30 px-3 py-2 text-xs">
           <div>
             <span className="text-muted-foreground">Endpoint: </span>
-            <code>{process.env.NEXT_PUBLIC_GATEWAY_URL}/s3</code>
+            <code>{endpoint}</code>
           </div>
           <div>
             <span className="text-muted-foreground">Region: </span>
