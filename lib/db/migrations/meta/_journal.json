@@ -85,6 +85,13 @@
       "when": 1794327999957,
       "tag": "0011_require_s3_credential_bucket",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794376690929,
+      "tag": "0012_activity_log_source",
+      "breakpoints": true
     }
   ]
 }

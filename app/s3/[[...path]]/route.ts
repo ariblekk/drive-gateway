@@ -5,6 +5,7 @@ import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { connection } from "next/server";
 
 import { getEnv } from "@/lib/env";
+import { withActivitySource } from "@/lib/activity";
 import type { S3Credential } from "@/lib/db";
 import { getCredentialUsage } from "@/lib/s3/credentials";
 import {
@@ -572,6 +573,16 @@ async function handleDeleteObject(
 }
 
 async function handleRequest(
+  request: Request,
+  context: RouteContext,
+  method: string,
+): Promise<Response> {
+  return withActivitySource("s3", () =>
+    handleRequestUntagged(request, context, method),
+  );
+}
+
+async function handleRequestUntagged(
   request: Request,
   context: RouteContext,
   method: string,

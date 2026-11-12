@@ -5,12 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   IconBrandGoogle,
-  IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
-  IconChevronUp,
   IconChevronsLeft,
   IconChevronsRight,
+  IconCloud,
   IconDatabase,
   IconDotsVertical,
   IconPlayerPause,
@@ -33,6 +32,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -49,6 +49,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -98,7 +106,6 @@ export function AccountsView() {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [quotaSort, setQuotaSort] = useState<"asc" | "desc">("asc");
   const [pageSize, setPageSize] = useState(10);
   const [pageIndex, setPageIndex] = useState(0);
   const { setActions } = useHeader();
@@ -318,11 +325,7 @@ export function AccountsView() {
     };
   }, [busy, setActions, syncAll]);
 
-  const filteredAccounts = [...(accounts ?? [])].sort((a, b) => {
-    const aPercent = quotaPercent(a.quotaLimit, a.quotaUsage) ?? 0;
-    const bPercent = quotaPercent(b.quotaLimit, b.quotaUsage) ?? 0;
-    return quotaSort === "asc" ? aPercent - bPercent : bPercent - aPercent;
-  });
+  const filteredAccounts = accounts ?? [];
 
   const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / pageSize));
   const currentPage = Math.min(pageIndex + 1, totalPages);
@@ -363,38 +366,39 @@ export function AccountsView() {
           {accounts === null ? (
             <Skeleton className="h-40 w-full" />
           ) : accounts.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              No accounts connected yet. Click “Connect account” to add one.
-            </p>
-          ) : filteredAccounts.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              No accounts match the quota filter.
-            </p>
+            <Card className="p-0">
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <IconCloud />
+                  </EmptyMedia>
+                  <EmptyTitle>No accounts connected</EmptyTitle>
+                  <EmptyDescription>
+                    Connect a Google Drive or S3 account to start routing
+                    uploads.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent className="flex-row justify-center">
+                  <Button variant="outline" asChild>
+                    <a href="/api/auth/google/start">
+                      <IconBrandGoogle />
+                      Google Drive
+                    </a>
+                  </Button>
+                  <Button onClick={() => setConnectS3Open(true)}>
+                    <IconDatabase />
+                    S3 storage
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            </Card>
           ) : (
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-muted">
                 <TableRow>
                   <TableHead>Account</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="-ml-2 h-8"
-                      aria-label={`Sort by quota ${quotaSort === "asc" ? "descending" : "ascending"}`}
-                      onClick={() => {
-                        setQuotaSort((sort) => (sort === "asc" ? "desc" : "asc"));
-                        setPageIndex(0);
-                      }}
-                    >
-                      Quota
-                      {quotaSort === "asc" ? (
-                        <IconChevronUp className="size-3.5" />
-                      ) : (
-                        <IconChevronDown className="size-3.5" />
-                      )}
-                    </Button>
-                  </TableHead>
+                  <TableHead>Quota</TableHead>
                   <TableHead>Last sync</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>

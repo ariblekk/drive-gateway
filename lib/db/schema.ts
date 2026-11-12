@@ -144,6 +144,7 @@ export const activityLog = sqliteTable(
     accountId: text("account_id"),
     bytes: integer("bytes"),
     status: text("status").notNull().default("ok"),
+    source: text("source").notNull().default("dashboard"),
     message: text("message"),
     createdAt: integer("created_at").notNull(),
   },

@@ -21,7 +21,8 @@ Uploads are routed automatically to the connected storage account with the **mos
 - Automatic account selection across all providers based on remaining quota (`quota` or `round_robin`).
 - S3-compatible API endpoint (`/s3`) with AWS Signature V4 authentication, bucket isolation, and storage limits.
 - WebDAV endpoint (`/webdav`) with RFC 4918 support for Windows Explorer network drive mapping, macOS Finder, Cyberduck, and Rclone.
-- Admin dashboard: overview with bandwidth charts, accounts & quota, file manager with bucket selector, S3 credentials, activity log.
+- Admin dashboard: overview with bandwidth charts, accounts & quota, object storage manager, S3 credentials, activity log.
+- Activity log records traffic through the gateway only (`dashboard`, `s3`, `webdav` channels) and is pruned to the last 90 days; requests sent straight to the backing provider are not logged.
 - File manager: folders, breadcrumb navigation, search, pagination, checkbox bulk actions (files and folders), rename, move, and permanent delete.
 - Upload dialog with drag & drop, multiple files, per-file progress, bucket selection, and folder destination.
 - Server-side upload limit from `MAX_UPLOAD_BYTES`; the limit is shown in the UI.

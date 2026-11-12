@@ -11,6 +11,7 @@ import {
   type StoredFile,
 } from "@/lib/db";
 import { getEnv } from "@/lib/env";
+import { withActivitySource } from "@/lib/activity";
 import { constantTimeEqual, verifyAdminPassword } from "@/lib/auth/admin-password";
 import {
   decryptS3Secret,
@@ -335,6 +336,13 @@ function renderPropResponse(item: {
 }
 
 export async function handleWebDavRequest(
+  req: NextApiRequest,
+  res: NextApiResponse,
+): Promise<void> {
+  return withActivitySource("webdav", () => handleWebDavRequestUntagged(req, res));
+}
+
+async function handleWebDavRequestUntagged(
   req: NextApiRequest,
   res: NextApiResponse,
 ): Promise<void> {

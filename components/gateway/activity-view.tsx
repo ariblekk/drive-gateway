@@ -4,11 +4,19 @@ import { useEffect, useState } from "react";
 import {
   IconChevronLeft,
   IconChevronRight,
+  IconHistory,
 } from "@tabler/icons-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -78,7 +86,20 @@ export function ActivityView() {
         {activity === null ? (
           <Skeleton className="h-40 w-full" />
         ) : activity.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No activity yet.</p>
+          <Card className="p-0">
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <IconHistory />
+                </EmptyMedia>
+                <EmptyTitle>No activity yet</EmptyTitle>
+                <EmptyDescription>
+                  Uploads, downloads, and deletions through the gateway appear
+                  here.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </Card>
         ) : (
           <div className="flex flex-col gap-3">
             <Card className="p-0">

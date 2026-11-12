@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
   - Settings tab shows bucket details (name, S3 API endpoint, created, storage account, objects, size) and a danger zone to delete the bucket.
 - **Settings Tabs**: `/dashboard/settings` now splits into **General** (backup & restore) and **Credentials** (S3 credentials).
 - **S3 Credential Management**: credentials can be edited via `PATCH /api/admin/s3-credentials/[id]`, with an edit/delete dropdown per row.
+- **Activity Log Source Tracking**: `activity_log.source` (`dashboard` | `s3` | `webdav`) is filled per channel via `AsyncLocalStorage` (migration `0012_activity_log_source.sql`).
+- **Activity Log Retention**: rows older than 90 days are pruned automatically (at most once per hour) inside `recordActivity`, so the table no longer grows forever.
 - Sidebar now shows the app version from `package.json`; the admin email is a static label (`admin@localhost`) so the dashboard stays prerenderable without runtime env.
 - **Permanent Deletion (No Recycle Bin)**:
   - Dashboard, WebDAV, and S3 `DeleteObject` now permanently delete files/folders from the backing provider.

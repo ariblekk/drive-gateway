@@ -17,6 +17,7 @@ import {
   IconCloud,
   IconDatabase,
   IconFileStack,
+  IconHistory,
   IconUsers,
 } from "@tabler/icons-react";
 
@@ -29,6 +30,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -433,7 +441,17 @@ export function OverviewCards() {
           </CardHeader>
           <CardContent>
             {recentActivity.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No activity yet.</p>
+              <Empty className="border-0 p-2">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <IconHistory />
+                  </EmptyMedia>
+                  <EmptyTitle>No activity yet</EmptyTitle>
+                  <EmptyDescription>
+                    Gateway operations will show up here.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
               <Table>
                 <TableHeader>

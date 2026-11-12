@@ -12,6 +12,7 @@ import {
   IconEye,
   IconFolder,
   IconFolderPlus,
+  IconInfoCircle,
   IconPencil,
   IconPlus,
   IconSearch,
@@ -42,6 +43,14 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import {
   Tabs,
   TabsContent,
@@ -912,6 +921,13 @@ export function ObjectStorageView() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-48">
+                <DropdownMenuItem
+                  onSelect={() => setDetailFile(file)}
+                  disabled={busyId === file.id}
+                >
+                  <IconInfoCircle />
+                  Details
+                </DropdownMenuItem>
                 {canPreview(file) && (
                   <DropdownMenuItem asChild>
                     <a
@@ -1074,9 +1090,45 @@ export function ObjectStorageView() {
         {isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : !hasItems ? (
-          <p className="text-xs text-muted-foreground">
-            {appliedQ ? "No results found." : "No files or folders found."}
-          </p>
+          <Card className="p-0">
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  {appliedQ ? <IconSearch /> : <IconFolder />}
+                </EmptyMedia>
+                <EmptyTitle>
+                  {appliedQ ? "No matching objects" : "This location is empty"}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {appliedQ
+                    ? `Nothing matches “${appliedQ}”.`
+                    : "Upload a file or create a folder to get started."}
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                {appliedQ ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setQ("");
+                      setAppliedQ("");
+                    }}
+                  >
+                    Clear search
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() =>
+                      openUploadDialog(currentFolderId, selectedBucket)
+                    }
+                  >
+                    <IconUpload />
+                    Upload
+                  </Button>
+                )}
+              </EmptyContent>
+            </Empty>
+          </Card>
         ) : (
           <Card className="p-0">
             <Table>
@@ -1096,24 +1148,7 @@ export function ObjectStorageView() {
               <TableBody>
                 {table.getRowModel().rows.length ? (
                   table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      className={
-                        row.original.file ? "cursor-pointer" : undefined
-                      }
-                      onClick={(event) => {
-                        const file = row.original.file;
-                        if (!file) return;
-                        if (
-                          (event.target as HTMLElement).closest(
-                            "button, a, input",
-                          )
-                        ) {
-                          return;
-                        }
-                        setDetailFile(file);
-                      }}
-                    >
+                    <TableRow key={row.id}>
                       {row.getVisibleCells().map((cell) => (
                         <TableCell key={cell.id}>
                           <FlexRender cell={cell} />
